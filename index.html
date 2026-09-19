@@ -11,5 +11,18 @@
   </head>
   <body>
     <iframe src="./kasir-offline.html" title="CL Petshop POS"></iframe>
+    <script>
+      if ('serviceWorker' in navigator) {
+        let reloading = false
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (reloading) return
+          reloading = true
+          window.location.reload()
+        })
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.getRegistration().then((registration) => registration?.update())
+        })
+      }
+    </script>
   </body>
 </html>
