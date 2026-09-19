@@ -1,0 +1,27 @@
+{
+  "name": "cl-petshop-pos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "prepare:price-list": "node scripts/copy-price-list.mjs",
+    "build": "tsc -b && npm run prepare:price-list && vite build",
+    "preview": "vite preview",
+    "check": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "dexie": "^4.2.0",
+    "lucide-react": "^0.544.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "vite-plugin-pwa": "^1.1.0"
+  }
+}
