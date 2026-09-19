@@ -11,3 +11,5 @@ vite.config.js
 vite.config.d.ts
 public/price-list-data.js
 scripts/__pycache__/
+.vercel
+.env*
