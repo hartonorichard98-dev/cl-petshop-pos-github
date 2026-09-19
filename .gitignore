@@ -4,6 +4,7 @@ dist/
 .env.local
 .env.*.local
 .vercel/
+supabase/.temp/
 .DS_Store
 *.log
 *.tsbuildinfo
