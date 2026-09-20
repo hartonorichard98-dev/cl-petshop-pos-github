@@ -1,4 +1,4 @@
-const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v2'
+const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v3'
 const POLL_MS = 15000
 
 let credentials = null
@@ -112,7 +112,8 @@ async function syncSales() {
     }
   } catch (error) {
     console.warn('[CL POS] cloud sync:', error)
-    setStatus('Offline · antrean tersimpan', 'error')
+    const message = error instanceof Error ? error.message : 'Cloud gagal dihubungi'
+    setStatus(`Cloud gagal · ${message}`, 'error')
   } finally {
     syncing = false
     if (rerunRequested && credentials && navigator.onLine) queueMicrotask(syncSales)
