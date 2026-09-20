@@ -62,7 +62,10 @@ async function syncSales() {
     const previous = fingerprints()
     const sales = currentSales()
     const requestFingerprints = new Map(sales.map(sale => [sale.id, fingerprint(sale)]))
-    const changed = sales.filter(sale => previous[sale.id] !== requestFingerprints.get(sale.id))
+    const eligibleSales = credentials.role === 'cashier'
+      ? sales.filter(sale => sale.status === 'completed')
+      : sales
+    const changed = eligibleSales.filter(sale => previous[sale.id] !== requestFingerprints.get(sale.id))
     const response = await fetch('/api/pos-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,7 +106,10 @@ async function syncSales() {
     })
     saveFingerprints(next)
 
-    const pending = [...current.values()].some(sale => next[sale.id] !== fingerprint(sale))
+    const pending = [...current.values()].some(sale => {
+      if (credentials.role === 'cashier' && sale.status !== 'completed') return false
+      return next[sale.id] !== fingerprint(sale)
+    })
     if (pending) {
       rerunRequested = true
       setStatus('Mengirim perubahan terbaru…', 'syncing')

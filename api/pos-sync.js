@@ -46,10 +46,22 @@ export default async function handler(request, response) {
     const text = await cloudResponse.text()
     const result = text ? JSON.parse(text) : {}
     if (!cloudResponse.ok) {
-      const invalidLogin = String(result?.message || '').includes('Invalid POS login')
-      return json(response, invalidLogin ? 401 : 502, {
-        error: invalidLogin ? 'Username atau PIN cloud salah' : 'Supabase gagal menyimpan transaksi',
+      const cloudMessage = String(result?.message || '')
+      console.error('[pos-sync] Supabase rejected batch', {
+        code: result?.code,
+        message: cloudMessage,
+        salesCount: sales.length,
       })
+      if (cloudMessage.includes('Invalid POS login')) {
+        return json(response, 401, { error: 'Username atau PIN cloud salah' })
+      }
+      if (cloudMessage.includes('Cashier can only sync completed sales')) {
+        return json(response, 422, { error: 'Akun kasir hanya boleh mengirim transaksi selesai' })
+      }
+      if (cloudMessage.includes('Invalid sale payload') || cloudMessage.includes('invalid input syntax for type uuid')) {
+        return json(response, 422, { error: 'Ada data transaksi lokal yang tidak valid' })
+      }
+      return json(response, 502, { error: 'Supabase gagal menyimpan transaksi' })
     }
     return json(response, 200, result)
   } catch (error) {
