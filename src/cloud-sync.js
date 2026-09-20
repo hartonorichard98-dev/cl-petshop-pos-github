@@ -1,3 +1,5 @@
+if (!window.__CL_POS_CLOUD_SYNC_LOADED__) {
+  window.__CL_POS_CLOUD_SYNC_LOADED__ = true
 const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v3'
 const POLL_MS = 15000
 const SYNC_ENDPOINT = window.location.protocol === 'file:'
@@ -160,3 +162,10 @@ window.addEventListener('focus', () => syncSales())
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') syncSales()
 })
+
+const restoredCredentials = window.CL_POS?.getCloudCredentials?.()
+if (restoredCredentials) startSync(restoredCredentials)
+else if (!navigator.onLine) setStatus('Offline · antrean tersimpan', 'error')
+else setStatus('Internet tersedia · masuk untuk sinkronisasi', 'local')
+
+}
