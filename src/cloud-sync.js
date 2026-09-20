@@ -1,8 +1,9 @@
-const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v1'
+const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v2'
 const POLL_MS = 15000
 
 let credentials = null
 let syncing = false
+let rerunRequested = false
 let timer = null
 
 function fingerprint(sale) {
@@ -49,13 +50,19 @@ function currentSales() {
 }
 
 async function syncSales() {
-  if (!credentials || syncing || !navigator.onLine) return
+  if (!credentials || !navigator.onLine) return
+  if (syncing) {
+    rerunRequested = true
+    return
+  }
   syncing = true
+  rerunRequested = false
   setStatus('Menyinkronkan cloud…', 'syncing')
   try {
     const previous = fingerprints()
     const sales = currentSales()
-    const changed = sales.filter(sale => previous[sale.id] !== fingerprint(sale))
+    const requestFingerprints = new Map(sales.map(sale => [sale.id, fingerprint(sale)]))
+    const changed = sales.filter(sale => previous[sale.id] !== requestFingerprints.get(sale.id))
     const response = await fetch('/api/pos-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -68,18 +75,47 @@ async function syncSales() {
     const result = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`)
 
-    window.CL_POS?.mergeCloudSales?.(Array.isArray(result.sales) ? result.sales : [], {
+    const latestBeforeMerge = currentSales()
+    const latestFingerprints = new Map(latestBeforeMerge.map(sale => [sale.id, fingerprint(sale)]))
+    const preserveIds = latestBeforeMerge
+      .filter(sale => requestFingerprints.get(sale.id) !== latestFingerprints.get(sale.id))
+      .map(sale => sale.id)
+    const cloudSales = Array.isArray(result.sales) ? result.sales : []
+    window.CL_POS?.mergeCloudSales?.(cloudSales, {
       includeCost: result.role === 'owner',
+      preserveIds,
     })
+
     const next = fingerprints()
-    currentSales().forEach(sale => { next[sale.id] = fingerprint(sale) })
+    const preserved = new Set(preserveIds)
+    const current = new Map(currentSales().map(sale => [sale.id, sale]))
+    cloudSales.forEach(sale => {
+      const local = current.get(sale.id)
+      if (local && !preserved.has(sale.id)) next[sale.id] = fingerprint(local)
+    })
+    changed.forEach(sale => {
+      const local = current.get(sale.id)
+      const sentFingerprint = requestFingerprints.get(sale.id)
+      if (local && fingerprint(local) === sentFingerprint) next[sale.id] = sentFingerprint
+    })
+    Object.keys(next).forEach(id => {
+      if (!current.has(id)) delete next[id]
+    })
     saveFingerprints(next)
-    setStatus('Cloud tersambung', 'online')
+
+    const pending = [...current.values()].some(sale => next[sale.id] !== fingerprint(sale))
+    if (pending) {
+      rerunRequested = true
+      setStatus('Mengirim perubahan terbaru…', 'syncing')
+    } else {
+      setStatus('Cloud tersambung · data terbaru', 'online')
+    }
   } catch (error) {
     console.warn('[CL POS] cloud sync:', error)
     setStatus('Offline · antrean tersimpan', 'error')
   } finally {
     syncing = false
+    if (rerunRequested && credentials && navigator.onLine) queueMicrotask(syncSales)
   }
 }
 
@@ -94,3 +130,7 @@ window.addEventListener('cl-pos-login', event => startSync(event.detail))
 window.addEventListener('cl-pos-data-changed', () => syncSales())
 window.addEventListener('online', () => syncSales())
 window.addEventListener('offline', () => setStatus('Offline · antrean tersimpan', 'error'))
+window.addEventListener('focus', () => syncSales())
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') syncSales()
+})
