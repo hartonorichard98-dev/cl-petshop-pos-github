@@ -5,13 +5,21 @@ create table if not exists public.sale_deletions (
   reason text,
   deleted_by text not null,
   deleted_at timestamptz not null default now(),
+  cashier_name text,
+  items jsonb not null default '[]'::jsonb,
+  total bigint,
+  cost_total bigint,
+  payment_method text,
+  business_date date,
+  sale_created_at timestamptz,
   primary key (store_id, sale_id)
 );
 
 alter table public.sale_deletions enable row level security;
 
 insert into public.sale_deletions (
-  store_id, sale_id, receipt_number, reason, deleted_by, deleted_at
+  store_id, sale_id, receipt_number, reason, deleted_by, deleted_at,
+  cashier_name, items, total, cost_total, payment_method, business_date, sale_created_at
 )
 select
   store_id,
@@ -19,14 +27,28 @@ select
   receipt_number,
   correction_reason,
   coalesce(cashier_name, 'Owner CL Petshop'),
-  updated_at
+  updated_at,
+  cashier_name,
+  items,
+  total,
+  cost_total,
+  payment_method,
+  business_date,
+  created_at
 from public.sales
 where status = 'deleted'
 on conflict (store_id, sale_id) do update set
   receipt_number = excluded.receipt_number,
   reason = excluded.reason,
   deleted_by = excluded.deleted_by,
-  deleted_at = excluded.deleted_at;
+  deleted_at = excluded.deleted_at,
+  cashier_name = excluded.cashier_name,
+  items = excluded.items,
+  total = excluded.total,
+  cost_total = excluded.cost_total,
+  payment_method = excluded.payment_method,
+  business_date = excluded.business_date,
+  sale_created_at = excluded.sale_created_at;
 
 delete from public.sales where status = 'deleted';
 
