@@ -394,12 +394,8 @@
       const cloudSync=document.createElement('script');
       cloudSync.src='./src/cloud-sync.js';
       document.body.appendChild(cloudSync);
-    }else{
-      const cloudSync=document.createElement('script');
-      cloudSync.type='module';
-      cloudSync.src='./src/cloud-sync.js';
-      document.body.appendChild(cloudSync);
     }
   </script>
+  <script type="module" src="./src/cloud-sync.js"></script>
 </body>
 </html>
