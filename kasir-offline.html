@@ -360,6 +360,13 @@
     window.CL_POS={getSales:()=>data.sales.map(sale=>({...sale})),mergeCloudSales(rows,options={}){let changed=false;const includeCost=Boolean(options.includeCost),preserveIds=new Set(options.preserveIds||[]),deletedIds=new Set(options.deletedIds||[]),localById=new Map(data.sales.map(sale=>[sale.id,sale]));deletedIds.forEach(id=>{const local=localById.get(id);if(local&&local.status!=='deleted'){local.status='deleted';local.deletedAt=local.deletedAt||new Date().toISOString();local.deleteReason=local.deleteReason||'Dihapus owner dari perangkat lain';changed=true}});rows.map(row=>cloudSaleToLocal(row,includeCost)).forEach(cloudSale=>{if(preserveIds.has(cloudSale.id)||deletedIds.has(cloudSale.id))return;const local=localById.get(cloudSale.id);if(!local){data.sales.push({...cloudSale,cost:cloudSale.cost??0});changed=true;return}const localTime=new Date(local.updatedAt||local.editedAt||local.createdAt||0).getTime(),cloudTime=new Date(cloudSale.updatedAt||cloudSale.createdAt||0).getTime(),needsOwnerCost=includeCost&&cloudSale.cost!==null&&local.cost!==cloudSale.cost;if(cloudTime>localTime||needsOwnerCost){const preservedCost=cloudSale.cost===null?local.cost:cloudSale.cost;Object.assign(local,cloudSale,{cost:preservedCost});changed=true}});if(changed){purchaseStatsCache=null;save({silent:true});if(user)renderAll()}return changed},setCloudStatus(message,state='local'){const note=$('cloudStatus')||document.querySelector('.offline-note');if(!note)return;note.id='cloudStatus';note.textContent=message;note.dataset.state=state},getCurrentUser:()=>user?{username:user.username,role:user.role,name:user.name}:null};
     function renderAll(){renderProducts();renderCart();renderReceiving();renderDashboard();renderExpenses();renderProductTable();renderClosing();renderClosingReminder();renderAudit();renderSecurity();$('historyTable').innerHTML=salesTable(data.sales,true)}renderCart();
   </script>
+  <script>
+    if(location.protocol==='file:'){
+      const cloudSync=document.createElement('script');
+      cloudSync.src='./src/cloud-sync.js';
+      document.body.appendChild(cloudSync);
+    }
+  </script>
   <script type="module" src="./src/cloud-sync.js"></script>
 </body>
 </html>

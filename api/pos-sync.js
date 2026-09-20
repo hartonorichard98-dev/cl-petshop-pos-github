@@ -11,7 +11,17 @@ function json(response, status, body) {
   response.end(JSON.stringify(body))
 }
 
+function allowLocalFileOrigin(request, response) {
+  if (request.headers.origin !== 'null') return
+  response.setHeader('Access-Control-Allow-Origin', 'null')
+  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  response.setHeader('Vary', 'Origin')
+}
+
 export default async function handler(request, response) {
+  allowLocalFileOrigin(request, response)
+  if (request.method === 'OPTIONS') return response.status(204).end()
   if (request.method !== 'POST') return json(response, 405, { error: 'Method not allowed' })
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL

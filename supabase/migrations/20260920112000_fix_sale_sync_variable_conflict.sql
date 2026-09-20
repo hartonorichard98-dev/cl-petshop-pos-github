@@ -1,35 +1,3 @@
-create table if not exists public.sale_deletions (
-  store_id uuid not null references public.stores(id) on delete cascade,
-  sale_id uuid not null,
-  receipt_number text,
-  reason text,
-  deleted_by text not null,
-  deleted_at timestamptz not null default now(),
-  primary key (store_id, sale_id)
-);
-
-alter table public.sale_deletions enable row level security;
-
-insert into public.sale_deletions (
-  store_id, sale_id, receipt_number, reason, deleted_by, deleted_at
-)
-select
-  store_id,
-  id,
-  receipt_number,
-  correction_reason,
-  coalesce(cashier_name, 'Owner CL Petshop'),
-  updated_at
-from public.sales
-where status = 'deleted'
-on conflict (store_id, sale_id) do update set
-  receipt_number = excluded.receipt_number,
-  reason = excluded.reason,
-  deleted_by = excluded.deleted_by,
-  deleted_at = excluded.deleted_at;
-
-delete from public.sales where status = 'deleted';
-
 create or replace function public.pos_sync_and_pull(
   p_api_secret text,
   p_store_id uuid,
@@ -193,6 +161,5 @@ begin
 end;
 $$;
 
-revoke all on table public.sale_deletions from anon, authenticated;
 revoke execute on function public.pos_sync_and_pull(text, uuid, text, text, jsonb) from public;
 grant execute on function public.pos_sync_and_pull(text, uuid, text, text, jsonb) to anon, authenticated;

@@ -1,5 +1,8 @@
 const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v3'
 const POLL_MS = 15000
+const SYNC_ENDPOINT = window.location.protocol === 'file:'
+  ? 'https://cl-petshop-pos.vercel.app/api/pos-sync'
+  : '/api/pos-sync'
 
 let credentials = null
 let syncing = false
@@ -81,7 +84,7 @@ async function syncSales() {
       ? sales.filter(sale => sale.status === 'completed')
       : sales
     const changed = eligibleSales.filter(sale => previous[sale.id] !== requestFingerprints.get(sale.id))
-    const response = await fetch('/api/pos-sync', {
+    const response = await fetch(SYNC_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
