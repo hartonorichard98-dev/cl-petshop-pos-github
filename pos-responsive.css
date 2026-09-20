@@ -155,6 +155,38 @@ body[data-theme="classic"] .dashboard-period-button.active { background: var(--g
   .comparison-layout { grid-template-columns: 1fr; }
 }
 
+@media (min-width: 701px) and (max-width: 900px) {
+  body { overflow: hidden; }
+  .content { height: calc(100dvh - 68px); overflow: hidden; padding: 10px 12px; }
+  #view-pos { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .pos-topline { margin-bottom: 4px; padding-bottom: 5px; }
+  .pos-topline strong { font-size: 18px; }
+  .closing-reminder { margin-bottom: 6px; padding: 7px 10px; }
+  .pos { flex: 1 1 auto; height: 100%; min-height: 0; overflow: hidden; grid-template-columns: minmax(0, .9fr) minmax(390px, 1.1fr); gap: 10px; align-items: stretch; }
+  #catalogSection { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .unified-input { margin: 0 0 10px; padding: 10px; }
+  .unified-row { grid-template-columns: minmax(0, 1fr); }
+  .unified-row button { padding: 9px 8px; }
+  .unified-help { display: none; }
+  .products { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .product { min-height: 112px; padding: 8px; grid-template-columns: 38px minmax(0, 1fr); }
+  .product-thumb { width: 36px; height: 36px; }
+  .product b { font-size: 12px; min-height: 0; }
+  .cart { height: 100%; min-height: 0; max-height: 100%; margin: 0; padding: 11px; overflow: hidden; }
+  .cart-head { padding-bottom: 7px; }
+  .cart-head h2 { font-size: 19px; }
+  .cart-head small, .payment-note { display: none; }
+  .cart-items { flex: 1 1 auto; min-height: 42px; overflow-y: auto; overscroll-behavior: contain; }
+  .checkout { flex: 0 0 auto; padding-top: 7px; }
+  .total { margin-bottom: 7px; padding: 8px 9px; }
+  .total strong { font-size: 21px; }
+  .payment-methods { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .quick-cash { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .quick-cash button { padding: 5px 2px; }
+  .change { margin: 6px 0; padding: 7px 8px; }
+  .checkout .primary { padding: 9px 10px; }
+}
+
 @media (min-width: 901px) and (max-width: 1180px) {
   .app { padding-left: 176px; }
   .sidebar { width: 176px; }
