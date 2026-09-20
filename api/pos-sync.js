@@ -1,5 +1,10 @@
 const MAX_SALES_PER_SYNC = 250
 
+function wholeMoney(value) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? Math.round(amount) : 0
+}
+
 function json(response, status, body) {
   response.status(status).setHeader('Content-Type', 'application/json')
   response.setHeader('Cache-Control', 'no-store')
@@ -26,6 +31,13 @@ export default async function handler(request, response) {
   if (sales.length > MAX_SALES_PER_SYNC) {
     return json(response, 413, { error: 'Antrean transaksi terlalu besar' })
   }
+  const normalizedSales = sales.map(sale => ({
+    ...sale,
+    total: wholeMoney(sale?.total),
+    cost: wholeMoney(sale?.cost),
+    cash: wholeMoney(sale?.cash),
+    change: wholeMoney(sale?.change),
+  }))
 
   try {
     const cloudResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_and_pull`, {
@@ -40,7 +52,7 @@ export default async function handler(request, response) {
         p_store_id: storeId,
         p_username: username,
         p_pin: pin,
-        p_sales: sales,
+        p_sales: normalizedSales,
       }),
     })
     const text = await cloudResponse.text()

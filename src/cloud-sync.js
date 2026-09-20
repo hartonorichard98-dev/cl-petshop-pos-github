@@ -49,6 +49,21 @@ function currentSales() {
   return window.CL_POS?.getSales?.() || []
 }
 
+function wholeMoney(value) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? Math.round(amount) : 0
+}
+
+function cloudPayloadSale(sale) {
+  return {
+    ...sale,
+    total: wholeMoney(sale.total),
+    cost: wholeMoney(sale.cost),
+    cash: wholeMoney(sale.cash),
+    change: wholeMoney(sale.change),
+  }
+}
+
 async function syncSales() {
   if (!credentials || !navigator.onLine) return
   if (syncing) {
@@ -72,7 +87,7 @@ async function syncSales() {
       body: JSON.stringify({
         username: credentials.username,
         pin: credentials.pin,
-        sales: changed,
+        sales: changed.map(cloudPayloadSale),
       }),
     })
     const result = await response.json().catch(() => ({}))
