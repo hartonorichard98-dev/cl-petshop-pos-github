@@ -102,6 +102,7 @@ async function syncSales() {
     window.CL_POS?.mergeCloudSales?.(cloudSales, {
       includeCost: result.role === 'owner',
       preserveIds,
+      deletedIds: Array.isArray(result.deleted_ids) ? result.deleted_ids : [],
     })
 
     const next = fingerprints()
