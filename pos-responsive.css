@@ -244,6 +244,7 @@ body[data-theme="classic"] .dashboard-period-button.active { background: var(--g
 .sale-detail-list { display: grid; gap: 5px; margin: 8px 0 14px; }
 .sale-detail-item { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed #999; }
 .sale-detail-total { display: flex; justify-content: space-between; padding: 10px; background: #f7c928; border: 2px solid var(--ink); border-radius: 5px; }
+.print-actions { flex-wrap: wrap; }
 .cashier-daily-details { margin-top: 18px; padding-top: 14px; border-top: 2px solid currentColor; }
 .cashier-detail-controls { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 8px; margin: 12px 0; }
 .cashier-daily-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px dashed #999; }

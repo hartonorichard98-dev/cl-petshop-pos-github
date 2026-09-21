@@ -110,6 +110,7 @@ async function syncSales() {
       .filter(sale => requestFingerprints.get(sale.id) !== latestFingerprints.get(sale.id))
       .map(sale => sale.id)
     const cloudSales = Array.isArray(result.sales) ? result.sales : []
+    window.CL_POS?.mergeCloudReceipts?.(cloudSales)
     window.CL_POS?.mergeCloudSales?.(cloudSales, {
       includeCost: result.role === 'owner',
       preserveIds,
