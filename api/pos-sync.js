@@ -1,4 +1,5 @@
 const MAX_SALES_PER_SYNC = 250
+const MAX_EXPENSES_PER_SYNC = 250
 
 function wholeMoney(value) {
   const amount = Number(value)
@@ -35,11 +36,15 @@ export default async function handler(request, response) {
   const username = String(request.body?.username || '').trim().toLowerCase()
   const pin = String(request.body?.pin || '')
   const sales = Array.isArray(request.body?.sales) ? request.body.sales : []
+  const expenses = Array.isArray(request.body?.expenses) ? request.body.expenses : []
   if (!/^[a-z0-9._-]{2,40}$/.test(username) || !/^\d{4,12}$/.test(pin)) {
     return json(response, 401, { error: 'Login cloud tidak valid' })
   }
   if (sales.length > MAX_SALES_PER_SYNC) {
     return json(response, 413, { error: 'Antrean transaksi terlalu besar' })
+  }
+  if (expenses.length > MAX_EXPENSES_PER_SYNC) {
+    return json(response, 413, { error: 'Antrean pengeluaran terlalu besar' })
   }
   const normalizedSales = sales.map(sale => ({
     ...sale,
@@ -51,6 +56,11 @@ export default async function handler(request, response) {
       ? sale.paymentBreakdown.map(part => ({ method: part?.method, amount: wholeMoney(part?.amount) }))
       : [],
     paymentEditHistory: Array.isArray(sale?.paymentEditHistory) ? sale.paymentEditHistory.slice(-20) : [],
+  }))
+  const normalizedExpenses = expenses.map(expense => ({
+    ...expense,
+    amount: wholeMoney(expense?.amount),
+    status: expense?.status === 'cancelled' ? 'cancelled' : 'active',
   }))
 
   try {
@@ -125,6 +135,29 @@ export default async function handler(request, response) {
       }
       return json(response, 502, { error: 'Supabase gagal menyimpan transaksi' })
     }
+    const expenseResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_expenses`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_api_secret: syncSecret,
+        p_store_id: storeId,
+        p_username: username,
+        p_pin: pin,
+        p_expenses: normalizedExpenses,
+      }),
+    })
+    const expenseText = await expenseResponse.text()
+    const expenseResult = expenseText ? JSON.parse(expenseText) : {}
+    if (!expenseResponse.ok) {
+      const expenseMessage = String(expenseResult?.message || '')
+      console.error('[pos-sync] Supabase rejected expenses', { code: expenseResult?.code, message: expenseMessage, expensesCount: expenses.length })
+      if (expenseMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+      return json(response, 502, { error: 'Supabase gagal menyimpan pengeluaran' })
+    }
     let auditLogs = []
     if (result.role === 'owner') {
       const auditResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_audit_logs`, {
@@ -143,7 +176,7 @@ export default async function handler(request, response) {
       })
       if (auditResponse.ok) auditLogs = await auditResponse.json()
     }
-    return json(response, 200, { ...result, audit_logs: auditLogs })
+    return json(response, 200, { ...result, expenses: Array.isArray(expenseResult.expenses) ? expenseResult.expenses : [], audit_logs: auditLogs })
   } catch (error) {
     console.error('[pos-sync]', error)
     return json(response, 502, { error: 'Cloud tidak dapat dihubungi' })
