@@ -20,6 +20,7 @@ function fingerprint(sale) {
     total: sale.total,
     cost: sale.cost,
     paymentMethod: sale.paymentMethod,
+    paymentBreakdown: sale.paymentBreakdown,
     cash: sale.cash,
     change: sale.change,
     status: sale.status,
@@ -66,6 +67,9 @@ function cloudPayloadSale(sale) {
     cost: wholeMoney(sale.cost),
     cash: wholeMoney(sale.cash),
     change: wholeMoney(sale.change),
+    paymentBreakdown: Array.isArray(sale.paymentBreakdown)
+      ? sale.paymentBreakdown.map(part => ({ method: part.method, amount: wholeMoney(part.amount) }))
+      : [],
   }
 }
 

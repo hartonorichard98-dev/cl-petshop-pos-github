@@ -47,6 +47,9 @@ export default async function handler(request, response) {
     cost: wholeMoney(sale?.cost),
     cash: wholeMoney(sale?.cash),
     change: wholeMoney(sale?.change),
+    paymentBreakdown: Array.isArray(sale?.paymentBreakdown)
+      ? sale.paymentBreakdown.map(part => ({ method: part?.method, amount: wholeMoney(part?.amount) }))
+      : [],
   }))
 
   try {
