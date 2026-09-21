@@ -245,12 +245,30 @@ body[data-theme="classic"] .dashboard-period-button.active { background: var(--g
 .sale-detail-item { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed #999; }
 .sale-detail-total { display: flex; justify-content: space-between; padding: 10px; background: #f7c928; border: 2px solid var(--ink); border-radius: 5px; }
 .print-actions { flex-wrap: wrap; }
-.cashier-daily-details { margin-top: 18px; padding-top: 14px; border-top: 2px solid currentColor; }
+.cashier-daily-details { margin-top: 22px; }
+.cashier-detail-card { width: min(980px, 100%); padding: 20px; border: 3px solid var(--ink); border-radius: 10px; background: var(--white); color: var(--ink); box-shadow: 7px 7px 0 var(--ink); }
+.cashier-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cashier-detail-heading span { display: block; font-size: 18px; font-weight: 950; }
+.cashier-detail-heading small { display: block; margin-top: 3px; color: #66706a; font-weight: 750; }
+.cashier-detail-heading button { width: auto; flex: 0 0 auto; }
 .cashier-detail-controls { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 8px; margin: 12px 0; }
-.cashier-daily-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px dashed #999; }
-.cashier-daily-row small { display: block; color: #5f655f; }
+.cashier-daily-sales { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cashier-transaction-card { min-width: 0; padding: 13px; border: 2px solid var(--ink); border-radius: 7px; background: var(--paper); }
+.cashier-transaction-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.cashier-transaction-main b, .cashier-transaction-main small { display: block; }
+.cashier-transaction-main small { margin-top: 3px; color: #5f655f; overflow-wrap: anywhere; }
+.cashier-transaction-main strong { font-size: 18px; white-space: nowrap; }
+.cashier-transaction-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 11px; padding-top: 9px; border-top: 1px dashed #999; }
+.cashier-transaction-footer .pill { max-width: 100%; overflow-wrap: anywhere; }
+body[data-theme="classic"] .cashier-detail-card { border: 1px solid #deddd5; border-radius: 12px; box-shadow: none; }
 @media (max-width: 700px) {
+  .cashier-detail-heading, .cashier-transaction-footer { align-items: stretch; flex-direction: column; }
+  .cashier-detail-heading button { width: 100%; }
   .cashier-detail-controls { grid-template-columns: 1fr; }
-  .cashier-daily-row { grid-template-columns: 1fr; }
+  .cashier-daily-sales { grid-template-columns: 1fr; }
+  .cashier-transaction-main { grid-template-columns: 1fr; }
   .sale-row-actions .table-detail { flex: 1 1 auto; }
+}
+@media (min-width: 701px) and (max-width: 1050px) {
+  .cashier-daily-sales { grid-template-columns: 1fr; }
 }
