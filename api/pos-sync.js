@@ -50,9 +50,46 @@ export default async function handler(request, response) {
     paymentBreakdown: Array.isArray(sale?.paymentBreakdown)
       ? sale.paymentBreakdown.map(part => ({ method: part?.method, amount: wholeMoney(part?.amount) }))
       : [],
+    paymentEditHistory: Array.isArray(sale?.paymentEditHistory) ? sale.paymentEditHistory.slice(-20) : [],
   }))
 
   try {
+    for (const sale of normalizedSales) {
+      const edit = sale.paymentEditHistory.at(-1)
+      if (!edit?.id) continue
+      const correctionResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_update_sale_payment`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_api_secret: syncSecret,
+          p_store_id: storeId,
+          p_username: username,
+          p_pin: pin,
+          p_sale_id: sale.id,
+          p_payment_method: sale.paymentMethod,
+          p_payment_breakdown: sale.paymentBreakdown,
+          p_cash_received: sale.cash,
+          p_reason: edit.reason,
+          p_edit_id: edit.id,
+          p_edited_at: edit.createdAt,
+        }),
+      })
+      const correctionText = await correctionResponse.text()
+      const correctionResult = correctionText ? JSON.parse(correctionText) : false
+      if (!correctionResponse.ok) {
+        console.error('[pos-sync] Supabase rejected payment correction', {
+          code: correctionResult?.code,
+          message: correctionResult?.message,
+          saleId: sale.id,
+        })
+        return json(response, 422, { error: 'Koreksi pembayaran gagal disimpan' })
+      }
+    }
+
     const cloudResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_and_pull`, {
       method: 'POST',
       headers: {
@@ -88,7 +125,25 @@ export default async function handler(request, response) {
       }
       return json(response, 502, { error: 'Supabase gagal menyimpan transaksi' })
     }
-    return json(response, 200, result)
+    let auditLogs = []
+    if (result.role === 'owner') {
+      const auditResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_audit_logs`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_api_secret: syncSecret,
+          p_store_id: storeId,
+          p_username: username,
+          p_pin: pin,
+        }),
+      })
+      if (auditResponse.ok) auditLogs = await auditResponse.json()
+    }
+    return json(response, 200, { ...result, audit_logs: auditLogs })
   } catch (error) {
     console.error('[pos-sync]', error)
     return json(response, 502, { error: 'Cloud tidak dapat dihubungi' })

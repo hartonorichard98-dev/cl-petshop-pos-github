@@ -117,6 +117,7 @@
 .report-actions .primary, .report-actions .secondary { width: auto; }
 .report-status { color: #59615d; font-size: 12px; font-weight: 850; }
 .comparison-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+#periodComparison { display: none; }
 .comparison-stat { border: 3px solid var(--ink); border-radius: 8px; background: var(--white); box-shadow: 4px 4px 0 var(--ink); padding: 14px; }
 .comparison-stat span { display: block; color: #5c625f; font-size: 10px; font-weight: 900; text-transform: uppercase; }
 .comparison-stat strong { display: block; margin-top: 7px; font-size: 20px; }
@@ -234,4 +235,21 @@ body[data-theme="classic"] .dashboard-period-button.active { background: var(--g
 @media (min-width: 901px) {
   .compact-search { max-width: 100%; }
   .checkout-total-highlight { margin-top: -2px; }
+}
+
+/* Transaction details and cashier history controls. */
+.qty-input { width: 48px; min-width: 42px; border: 2px solid var(--ink); border-radius: 6px; padding: 5px 3px; text-align: center; font: inherit; font-weight: 900; }
+.sale-row-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.table-detail { border: 2px solid var(--ink); background: var(--paper); border-radius: 5px; padding: 4px 7px; font-size: 10px; font-weight: 900; cursor: pointer; }
+.sale-detail-list { display: grid; gap: 5px; margin: 8px 0 14px; }
+.sale-detail-item { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed #999; }
+.sale-detail-total { display: flex; justify-content: space-between; padding: 10px; background: #f7c928; border: 2px solid var(--ink); border-radius: 5px; }
+.cashier-daily-details { margin-top: 18px; padding-top: 14px; border-top: 2px solid currentColor; }
+.cashier-detail-controls { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 8px; margin: 12px 0; }
+.cashier-daily-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px dashed #999; }
+.cashier-daily-row small { display: block; color: #5f655f; }
+@media (max-width: 700px) {
+  .cashier-detail-controls { grid-template-columns: 1fr; }
+  .cashier-daily-row { grid-template-columns: 1fr; }
+  .sale-row-actions .table-detail { flex: 1 1 auto; }
 }

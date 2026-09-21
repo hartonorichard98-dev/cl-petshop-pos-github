@@ -21,6 +21,7 @@ function fingerprint(sale) {
     cost: sale.cost,
     paymentMethod: sale.paymentMethod,
     paymentBreakdown: sale.paymentBreakdown,
+    paymentEditHistory: sale.paymentEditHistory,
     cash: sale.cash,
     change: sale.change,
     status: sale.status,
@@ -70,6 +71,7 @@ function cloudPayloadSale(sale) {
     paymentBreakdown: Array.isArray(sale.paymentBreakdown)
       ? sale.paymentBreakdown.map(part => ({ method: part.method, amount: wholeMoney(part.amount) }))
       : [],
+    paymentEditHistory: Array.isArray(sale.paymentEditHistory) ? sale.paymentEditHistory.slice(-20) : [],
   }
 }
 
@@ -112,7 +114,9 @@ async function syncSales() {
       includeCost: result.role === 'owner',
       preserveIds,
       deletedIds: Array.isArray(result.deleted_ids) ? result.deleted_ids : [],
+      auditLogs: Array.isArray(result.audit_logs) ? result.audit_logs : [],
     })
+    window.CL_POS?.mergeCloudAuditLogs?.(Array.isArray(result.audit_logs) ? result.audit_logs : [])
 
     const next = fingerprints()
     const preserved = new Set(preserveIds)
