@@ -268,4 +268,4 @@ end;
 $$;
 
 revoke execute on function public.pos_pull_audit_logs(text, uuid, text, text) from public;
-grant execute on function public.pos_pull_audit_logs(text, uuid, text, text) to anon, authenticated;
+grant execute on function public.pos_pull_audit_logs(text, uuid, text, text) to anon, authenticated;;
