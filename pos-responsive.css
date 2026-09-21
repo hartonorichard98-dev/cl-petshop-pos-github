@@ -252,13 +252,14 @@ body[data-theme="classic"] .dashboard-period-button.active { background: var(--g
 .cashier-detail-heading small { display: block; margin-top: 3px; color: #66706a; font-weight: 750; }
 .cashier-detail-heading button { width: auto; flex: 0 0 auto; }
 .cashier-detail-controls { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 8px; margin: 12px 0; }
-.cashier-daily-sales { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.cashier-transaction-card { min-width: 0; padding: 13px; border: 2px solid var(--ink); border-radius: 7px; background: var(--paper); }
-.cashier-transaction-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.cashier-daily-sales { display: grid; grid-template-columns: 1fr; gap: 0; border: 2px solid var(--ink); border-radius: 7px; overflow: hidden; }
+.cashier-transaction-card { min-width: 0; padding: 12px 14px; border: 0; border-bottom: 1px solid #c7c3b8; border-radius: 0; background: var(--white); }
+.cashier-transaction-card:last-child { border-bottom: 0; }
+.cashier-transaction-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; }
 .cashier-transaction-main b, .cashier-transaction-main small { display: block; }
 .cashier-transaction-main small { margin-top: 3px; color: #5f655f; overflow-wrap: anywhere; }
 .cashier-transaction-main strong { font-size: 18px; white-space: nowrap; }
-.cashier-transaction-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 11px; padding-top: 9px; border-top: 1px dashed #999; }
+.cashier-transaction-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .cashier-transaction-footer .pill { max-width: 100%; overflow-wrap: anywhere; }
 body[data-theme="classic"] .cashier-detail-card { border: 1px solid #deddd5; border-radius: 12px; box-shadow: none; }
 @media (max-width: 700px) {
@@ -268,7 +269,4 @@ body[data-theme="classic"] .cashier-detail-card { border: 1px solid #deddd5; bor
   .cashier-daily-sales { grid-template-columns: 1fr; }
   .cashier-transaction-main { grid-template-columns: 1fr; }
   .sale-row-actions .table-detail { flex: 1 1 auto; }
-}
-@media (min-width: 701px) and (max-width: 1050px) {
-  .cashier-daily-sales { grid-template-columns: 1fr; }
 }
