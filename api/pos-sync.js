@@ -1,5 +1,7 @@
 const MAX_SALES_PER_SYNC = 250
 const MAX_EXPENSES_PER_SYNC = 250
+const MAX_MOVEMENTS_PER_SYNC = 500
+const MAX_INVENTORY_PRODUCTS_PER_SYNC = 500
 
 function wholeMoney(value) {
   const amount = Number(value)
@@ -20,6 +22,20 @@ function allowLocalFileOrigin(request, response) {
   response.setHeader('Vary', 'Origin')
 }
 
+function validCursor(value) {
+  const cursor = String(value || '').trim()
+  return cursor && Number.isFinite(Date.parse(cursor)) ? cursor : ''
+}
+
+function changedAfter(rows, cursor, fields) {
+  if (!Array.isArray(rows) || !cursor) return Array.isArray(rows) ? rows : []
+  const since = Date.parse(cursor)
+  return rows.filter(row => {
+    const timestamp = fields.map(field => row?.[field]).find(Boolean)
+    return !timestamp || Date.parse(timestamp) > since
+  })
+}
+
 export default async function handler(request, response) {
   allowLocalFileOrigin(request, response)
   if (request.method === 'OPTIONS') return response.status(204).end()
@@ -35,8 +51,12 @@ export default async function handler(request, response) {
 
   const username = String(request.body?.username || '').trim().toLowerCase()
   const pin = String(request.body?.pin || '')
+  const pullSince = validCursor(request.body?.pullSince)
+  const syncCursor = new Date().toISOString()
   const sales = Array.isArray(request.body?.sales) ? request.body.sales : []
   const expenses = Array.isArray(request.body?.expenses) ? request.body.expenses : []
+  const movements = Array.isArray(request.body?.movements) ? request.body.movements : []
+  const inventoryProducts = Array.isArray(request.body?.inventoryProducts) ? request.body.inventoryProducts : []
   if (!/^[a-z0-9._-]{2,40}$/.test(username) || !/^\d{4,12}$/.test(pin)) {
     return json(response, 401, { error: 'Login cloud tidak valid' })
   }
@@ -45,6 +65,12 @@ export default async function handler(request, response) {
   }
   if (expenses.length > MAX_EXPENSES_PER_SYNC) {
     return json(response, 413, { error: 'Antrean pengeluaran terlalu besar' })
+  }
+  if (movements.length > MAX_MOVEMENTS_PER_SYNC) {
+    return json(response, 413, { error: 'Antrean perubahan stok terlalu besar' })
+  }
+  if (inventoryProducts.length > MAX_INVENTORY_PRODUCTS_PER_SYNC) {
+    return json(response, 413, { error: 'Baseline stok terlalu besar' })
   }
   const normalizedSales = sales.map(sale => ({
     ...sale,
@@ -61,6 +87,12 @@ export default async function handler(request, response) {
     ...expense,
     amount: wholeMoney(expense?.amount),
     status: expense?.status === 'cancelled' ? 'cancelled' : 'active',
+    type: expense?.type === 'goods' ? 'goods' : 'cash',
+    pocket: expense?.pocket === 'profit' ? 'profit' : 'store',
+    productId: Number(expense?.productId) || null,
+    productName: expense?.productName || null,
+    quantity: Number(expense?.quantity) || null,
+    unitValue: wholeMoney(expense?.unitValue),
   }))
 
   try {
@@ -158,6 +190,29 @@ export default async function handler(request, response) {
       if (expenseMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
       return json(response, 502, { error: 'Supabase gagal menyimpan pengeluaran' })
     }
+    const inventoryResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_inventory`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_api_secret: syncSecret,
+        p_store_id: storeId,
+        p_username: username,
+        p_pin: pin,
+        p_products: inventoryProducts,
+        p_movements: movements,
+      }),
+    })
+    const inventoryText = await inventoryResponse.text()
+    const inventoryResult = inventoryText ? JSON.parse(inventoryText) : {}
+    if (!inventoryResponse.ok) {
+      console.error('[pos-sync] Supabase rejected inventory movements', { code: inventoryResult?.code, message: inventoryResult?.message, movementsCount: movements.length })
+      if (String(inventoryResult?.message || '').includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+      return json(response, 502, { error: 'Supabase gagal menyimpan perubahan stok' })
+    }
     let auditLogs = []
     if (result.role === 'owner') {
       const auditResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_audit_logs`, {
@@ -176,7 +231,15 @@ export default async function handler(request, response) {
       })
       if (auditResponse.ok) auditLogs = await auditResponse.json()
     }
-    return json(response, 200, { ...result, expenses: Array.isArray(expenseResult.expenses) ? expenseResult.expenses : [], audit_logs: auditLogs })
+    return json(response, 200, {
+      ...result,
+      sales: changedAfter(result.sales, pullSince, ['updated_at', 'created_at']),
+      expenses: changedAfter(expenseResult.expenses, pullSince, ['updated_at', 'created_at']),
+      inventory_movements: changedAfter(inventoryResult.movements, pullSince, ['created_at']),
+      inventory_products: changedAfter(inventoryResult.products, pullSince, ['updated_at', 'created_at']),
+      audit_logs: changedAfter(auditLogs, pullSince, ['created_at']),
+      sync_cursor: syncCursor,
+    })
   } catch (error) {
     console.error('[pos-sync]', error)
     return json(response, 502, { error: 'Cloud tidak dapat dihubungi' })
