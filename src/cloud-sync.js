@@ -306,7 +306,7 @@ async function syncSales() {
     movementBatch.forEach(operation => {
       const local = currentInventoryMap.get(operation.id)
       const sentFingerprint = requestInventoryFingerprints.get(operation.id)
-      if (local && inventoryFingerprint(local) === sentFingerprint && cloudMovements.some(movement => movement.id === operation.id)) nextInventoryFingerprints[operation.id] = sentFingerprint
+      if (local && inventoryFingerprint(local) === sentFingerprint) nextInventoryFingerprints[operation.id] = sentFingerprint
     })
     Object.keys(nextInventoryFingerprints).forEach(id => { if (!currentInventoryMap.has(id)) delete nextInventoryFingerprints[id] })
     saveInventoryFingerprints(nextInventoryFingerprints)
