@@ -183,7 +183,7 @@ function cloudPayloadExpense(expense) {
     note: expense.note || '',
     status: expense.status || 'active',
     type: expense.type === 'goods' ? 'goods' : 'cash',
-    pocket: expense.pocket === 'profit' ? 'profit' : 'store',
+    pocket: expense.pocket === 'profit' ? 'profit' : expense.pocket === 'pending' ? 'pending' : 'store',
     productId: expense.productId || null,
     productName: expense.productName || '',
     quantity: Number(expense.quantity) || null,

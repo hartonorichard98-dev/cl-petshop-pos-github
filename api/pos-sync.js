@@ -88,7 +88,7 @@ export default async function handler(request, response) {
     amount: wholeMoney(expense?.amount),
     status: expense?.status === 'cancelled' ? 'cancelled' : 'active',
     type: expense?.type === 'goods' ? 'goods' : 'cash',
-    pocket: expense?.pocket === 'profit' ? 'profit' : 'store',
+    pocket: expense?.pocket === 'profit' ? 'profit' : expense?.pocket === 'pending' ? 'pending' : 'store',
     productId: Number(expense?.productId) || null,
     productName: expense?.productName || null,
     quantity: Number(expense?.quantity) || null,
