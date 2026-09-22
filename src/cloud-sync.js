@@ -4,7 +4,7 @@ const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v3'
 const EXPENSE_FINGERPRINTS_KEY = 'cl-petshop-cloud-expense-fingerprints-v1'
 const INVENTORY_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
-const POLL_MS = 15000
+const POLL_MS = 30000
 const REQUEST_TIMEOUT_MS = 12000
 const SALES_BATCH_SIZE = 100
 const EXPENSE_BATCH_SIZE = 100
@@ -194,15 +194,14 @@ function cloudPayloadExpense(expense) {
   }
 }
 
-async function syncSales() {
+async function syncSales(options = {}) {
   if (!credentials || !navigator.onLine) return
   if (syncing) {
-    rerunRequested = true
+    if (options.rerun) rerunRequested = true
     return
   }
   syncing = true
   rerunRequested = false
-  setStatus('Menyinkronkan cloud…', 'syncing')
   try {
     const previous = fingerprints()
     const sales = currentSales()
@@ -224,6 +223,7 @@ async function syncSales() {
     const movementBatch = changedMovements.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
+    else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     const response = await fetch(SYNC_ENDPOINT, {
@@ -343,8 +343,8 @@ function startSync(detail) {
 }
 
 window.addEventListener('cl-pos-login', event => startSync(event.detail))
-window.addEventListener('cl-pos-data-changed', () => syncSales())
-window.addEventListener('online', () => syncSales())
+window.addEventListener('cl-pos-data-changed', () => syncSales({ rerun: true }))
+window.addEventListener('online', () => syncSales({ rerun: true }))
 window.addEventListener('offline', () => setStatus('Offline · antrean tersimpan', 'error'))
 window.addEventListener('focus', () => syncSales())
 document.addEventListener('visibilitychange', () => {
