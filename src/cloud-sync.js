@@ -52,8 +52,20 @@ function fingerprints() {
   try { return JSON.parse(localStorage.getItem(FINGERPRINTS_KEY) || '{}') || {} } catch { return {} }
 }
 
+function saveCache(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+    return true
+  } catch (error) {
+    if (error?.name !== 'QuotaExceededError') throw error
+    localStorage.removeItem(key)
+    return false
+  }
+}
+
 function saveFingerprints(value) {
-  localStorage.setItem(FINGERPRINTS_KEY, JSON.stringify(value))
+  if (saveCache(FINGERPRINTS_KEY, value)) return
+  saveCache(FINGERPRINTS_KEY, Object.fromEntries(Object.entries(value).slice(-500)))
 }
 
 function expenseFingerprint(expense) {
@@ -82,7 +94,8 @@ function expenseFingerprints() {
 }
 
 function saveExpenseFingerprints(value) {
-  localStorage.setItem(EXPENSE_FINGERPRINTS_KEY, JSON.stringify(value))
+  if (saveCache(EXPENSE_FINGERPRINTS_KEY, value)) return
+  saveCache(EXPENSE_FINGERPRINTS_KEY, Object.fromEntries(Object.entries(value).slice(-500)))
 }
 
 function inventoryFingerprint(operation) {
@@ -94,7 +107,8 @@ function inventoryFingerprints() {
 }
 
 function saveInventoryFingerprints(value) {
-  localStorage.setItem(INVENTORY_FINGERPRINTS_KEY, JSON.stringify(value))
+  if (saveCache(INVENTORY_FINGERPRINTS_KEY, value)) return
+  saveCache(INVENTORY_FINGERPRINTS_KEY, Object.fromEntries(Object.entries(value).slice(-500)))
 }
 
 function inventoryRequestFingerprint(request) {
@@ -106,7 +120,8 @@ function inventoryRequestFingerprints() {
 }
 
 function saveInventoryRequestFingerprints(value) {
-  localStorage.setItem(INVENTORY_REQUEST_FINGERPRINTS_KEY, JSON.stringify(value))
+  if (saveCache(INVENTORY_REQUEST_FINGERPRINTS_KEY, value)) return
+  saveCache(INVENTORY_REQUEST_FINGERPRINTS_KEY, Object.fromEntries(Object.entries(value).slice(-500)))
 }
 
 function lastPullKey() {
@@ -119,7 +134,9 @@ function lastPullCursor() {
 }
 
 function saveLastPullCursor(value) {
-  if (Number.isFinite(Date.parse(value))) localStorage.setItem(lastPullKey(), value)
+  if (Number.isFinite(Date.parse(value))) {
+    try { localStorage.setItem(lastPullKey(), value) } catch (error) { if (error?.name !== 'QuotaExceededError') throw error }
+  }
 }
 
 function setStatus(message, state = 'local') {
