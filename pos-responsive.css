@@ -1,4 +1,12 @@
 /* Laptop/desktop POS layout: payment stays visible and product names stay readable. */
+.product-name { display: flex !important; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.product-title { min-width: 0; }
+.product-weight { display: inline-flex; flex: 0 0 auto; align-items: center; min-height: 20px; padding: 2px 6px; border: 2px solid var(--ink); border-radius: 5px; background: var(--gold); color: var(--ink); font-size: 10px; font-weight: 950; line-height: 1; white-space: nowrap; }
+.product.cashier-product { min-height: 94px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; row-gap: 3px; }
+.product.cashier-product > * { grid-column: 1; }
+.product.cashier-product .product-name { font-size: 12px; line-height: 1.25; }
+.product.cashier-product strong { font-size: 14px; color: var(--ink); }
+
 @media (min-width: 901px) {
   body { overflow: hidden; }
   .app { padding-left: 200px; }
