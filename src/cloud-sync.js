@@ -3,6 +3,7 @@ if (!window.__CL_POS_CLOUD_SYNC_LOADED__) {
 const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v3'
 const EXPENSE_FINGERPRINTS_KEY = 'cl-petshop-cloud-expense-fingerprints-v1'
 const INVENTORY_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-fingerprints-v1'
+const INVENTORY_REQUEST_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-request-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
 const POLL_MS = 30000
 const REQUEST_TIMEOUT_MS = 12000
@@ -96,6 +97,18 @@ function saveInventoryFingerprints(value) {
   localStorage.setItem(INVENTORY_FINGERPRINTS_KEY, JSON.stringify(value))
 }
 
+function inventoryRequestFingerprint(request) {
+  return JSON.stringify({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges, proposedNote: request.proposedNote, status: request.status, requestedBy: request.requestedBy, requestedAt: request.requestedAt, reviewNote: request.reviewNote })
+}
+
+function inventoryRequestFingerprints() {
+  try { return JSON.parse(localStorage.getItem(INVENTORY_REQUEST_FINGERPRINTS_KEY) || '{}') || {} } catch { return {} }
+}
+
+function saveInventoryRequestFingerprints(value) {
+  localStorage.setItem(INVENTORY_REQUEST_FINGERPRINTS_KEY, JSON.stringify(value))
+}
+
 function lastPullKey() {
   return `${LAST_PULL_KEY_PREFIX}:${credentials?.username || 'unknown'}`
 }
@@ -127,6 +140,10 @@ function currentInventoryOperations() {
 
 function currentInventoryProducts() {
   return window.CL_POS?.getInventoryProducts?.() || []
+}
+
+function currentInventoryChangeRequests() {
+  return window.CL_POS?.getInventoryChangeRequests?.() || []
 }
 
 function inventoryBaselines(operations) {
@@ -211,6 +228,9 @@ async function syncSales(options = {}) {
     const requestExpenseFingerprints = new Map(expenses.map(expense => [expense.id, expenseFingerprint(expense)]))
     const previousInventoryFingerprints = inventoryFingerprints()
     const operations = currentInventoryOperations()
+    const inventoryChangeRequests = currentInventoryChangeRequests()
+    const previousInventoryRequestFingerprints = inventoryRequestFingerprints()
+    const requestChangeFingerprints = new Map(inventoryChangeRequests.map(request => [request.id, inventoryRequestFingerprint(request)]))
     const requestInventoryFingerprints = new Map(operations.map(operation => [operation.id, inventoryFingerprint(operation)]))
     const eligibleSales = credentials.role === 'cashier'
       ? sales.filter(sale => sale.status === 'completed')
@@ -221,7 +241,9 @@ async function syncSales(options = {}) {
     const salesBatch = changed.slice(0, SALES_BATCH_SIZE)
     const expenseBatch = changedExpenses.slice(0, EXPENSE_BATCH_SIZE)
     const movementBatch = changedMovements.slice(0, MOVEMENT_BATCH_SIZE)
-    const pendingCount = changed.length + changedExpenses.length + changedMovements.length
+    const changedRequests = inventoryChangeRequests.filter(request => previousInventoryRequestFingerprints[request.id] !== requestChangeFingerprints.get(request.id))
+    const requestBatch = changedRequests.slice(0, MOVEMENT_BATCH_SIZE)
+    const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const controller = new AbortController()
@@ -238,6 +260,7 @@ async function syncSales(options = {}) {
         expenses: expenseBatch.map(cloudPayloadExpense),
         inventoryProducts: inventoryBaselines(movementBatch),
         movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
+        inventoryRequests: requestBatch.map(request => ({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges || [], proposedNote: request.proposedNote || '', status: request.status || 'pending', requestedBy: request.requestedBy || '', requestedAt: request.requestedAt || request.createdAt, reviewNote: request.reviewNote || '' })),
       }),
     }).finally(() => clearTimeout(timeout))
     const result = await response.json().catch(() => ({}))
@@ -251,6 +274,7 @@ async function syncSales(options = {}) {
     const cloudSales = Array.isArray(result.sales) ? result.sales : []
     const cloudExpenses = Array.isArray(result.expenses) ? result.expenses : []
     const cloudMovements = Array.isArray(result.inventory_movements) ? result.inventory_movements : []
+    const cloudRequests = Array.isArray(result.inventory_change_requests) ? result.inventory_change_requests : []
     const cloudProducts = Array.isArray(result.inventory_products) ? result.inventory_products : []
     window.CL_POS?.mergeCloudReceipts?.(cloudSales)
     window.CL_POS?.mergeCloudSales?.(cloudSales, {
@@ -262,6 +286,10 @@ async function syncSales(options = {}) {
     window.CL_POS?.mergeCloudAuditLogs?.(Array.isArray(result.audit_logs) ? result.audit_logs : [])
     window.CL_POS?.mergeCloudExpenses?.(cloudExpenses)
     window.CL_POS?.mergeCloudInventoryMovements?.(cloudMovements, cloudProducts)
+    window.CL_POS?.mergeCloudInventoryChangeRequests?.(cloudRequests)
+    if (Array.isArray(result.rejected_inventory_movements) && result.rejected_inventory_movements.length) {
+      window.CL_POS?.rejectCloudInventoryMovements?.(result.rejected_inventory_movements)
+    }
     saveLastPullCursor(result.sync_cursor)
 
     const next = fingerprints()
@@ -311,13 +339,28 @@ async function syncSales(options = {}) {
     Object.keys(nextInventoryFingerprints).forEach(id => { if (!currentInventoryMap.has(id)) delete nextInventoryFingerprints[id] })
     saveInventoryFingerprints(nextInventoryFingerprints)
 
+    const nextRequestFingerprints = inventoryRequestFingerprints()
+    const currentRequestMap = new Map(currentInventoryChangeRequests().map(request => [request.id, request]))
+    cloudRequests.forEach(request => {
+      const local = currentRequestMap.get(request.id)
+      if (local) nextRequestFingerprints[request.id] = inventoryRequestFingerprint(local)
+    })
+    requestBatch.forEach(request => {
+      const local = currentRequestMap.get(request.id)
+      const sentFingerprint = requestChangeFingerprints.get(request.id)
+      if (local && inventoryRequestFingerprint(local) === sentFingerprint) nextRequestFingerprints[request.id] = sentFingerprint
+    })
+    Object.keys(nextRequestFingerprints).forEach(id => { if (!currentRequestMap.has(id)) delete nextRequestFingerprints[id] })
+    saveInventoryRequestFingerprints(nextRequestFingerprints)
+
     const pendingSales = [...current.values()].some(sale => {
       if (credentials.role === 'cashier' && sale.status !== 'completed') return false
       return next[sale.id] !== fingerprint(sale)
     })
     const pendingExpenses = [...currentExpenseMap.values()].some(expense => nextExpenseFingerprints[expense.id] !== expenseFingerprint(expense))
     const pendingInventory = [...currentInventoryMap.values()].some(operation => nextInventoryFingerprints[operation.id] !== inventoryFingerprint(operation))
-    if (pendingSales || pendingExpenses || pendingInventory) {
+    const pendingRequests = [...currentRequestMap.values()].some(request => nextRequestFingerprints[request.id] !== inventoryRequestFingerprint(request))
+    if (pendingSales || pendingExpenses || pendingInventory || pendingRequests) {
       rerunRequested = true
       setStatus('Mengirim perubahan terbaru…', 'syncing')
     } else {

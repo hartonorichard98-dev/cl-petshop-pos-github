@@ -2,6 +2,7 @@ const MAX_SALES_PER_SYNC = 250
 const MAX_EXPENSES_PER_SYNC = 250
 const MAX_MOVEMENTS_PER_SYNC = 500
 const MAX_INVENTORY_PRODUCTS_PER_SYNC = 500
+const MAX_INVENTORY_REQUESTS_PER_SYNC = 200
 
 function wholeMoney(value) {
   const amount = Number(value)
@@ -57,6 +58,7 @@ export default async function handler(request, response) {
   const expenses = Array.isArray(request.body?.expenses) ? request.body.expenses : []
   const movements = Array.isArray(request.body?.movements) ? request.body.movements : []
   const inventoryProducts = Array.isArray(request.body?.inventoryProducts) ? request.body.inventoryProducts : []
+  const inventoryRequests = Array.isArray(request.body?.inventoryRequests) ? request.body.inventoryRequests : []
   if (!/^[a-z0-9._-]{2,40}$/.test(username) || !/^\d{4,12}$/.test(pin)) {
     return json(response, 401, { error: 'Login cloud tidak valid' })
   }
@@ -71,6 +73,9 @@ export default async function handler(request, response) {
   }
   if (inventoryProducts.length > MAX_INVENTORY_PRODUCTS_PER_SYNC) {
     return json(response, 413, { error: 'Baseline stok terlalu besar' })
+  }
+  if (inventoryRequests.length > MAX_INVENTORY_REQUESTS_PER_SYNC) {
+    return json(response, 413, { error: 'Antrean persetujuan repack terlalu besar' })
   }
   const normalizedSales = sales.map(sale => ({
     ...sale,
@@ -213,6 +218,29 @@ export default async function handler(request, response) {
       if (String(inventoryResult?.message || '').includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
       return json(response, 502, { error: 'Supabase gagal menyimpan perubahan stok' })
     }
+    const requestResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_inventory_change_requests`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_api_secret: syncSecret,
+        p_store_id: storeId,
+        p_username: username,
+        p_pin: pin,
+        p_requests: inventoryRequests,
+      }),
+    })
+    const requestText = await requestResponse.text()
+    const requestResult = requestText ? JSON.parse(requestText) : {}
+    if (!requestResponse.ok) {
+      console.error('[pos-sync] Supabase rejected repack requests', { code: requestResult?.code, message: requestResult?.message, requestsCount: inventoryRequests.length })
+      if (String(requestResult?.message || '').includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+      if (String(requestResult?.message || '').includes('Only owner')) return json(response, 403, { error: 'Hanya owner yang boleh menyetujui perubahan repack' })
+      return json(response, 502, { error: 'Supabase gagal menyimpan persetujuan repack' })
+    }
     let auditLogs = []
     if (result.role === 'owner') {
       const auditResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_audit_logs`, {
@@ -235,8 +263,10 @@ export default async function handler(request, response) {
       ...result,
       sales: changedAfter(result.sales, pullSince, ['updated_at', 'created_at']),
       expenses: changedAfter(expenseResult.expenses, pullSince, ['updated_at', 'created_at']),
-      inventory_movements: changedAfter(inventoryResult.movements, pullSince, ['created_at']),
-      inventory_products: changedAfter(inventoryResult.products, pullSince, ['updated_at', 'created_at']),
+      inventory_movements: changedAfter(requestResult.movements || inventoryResult.movements, pullSince, ['updated_at', 'created_at']),
+      inventory_products: changedAfter(requestResult.products || inventoryResult.products, pullSince, ['updated_at', 'created_at']),
+      inventory_change_requests: changedAfter(requestResult.requests, pullSince, ['updated_at', 'requested_at']),
+      rejected_inventory_movements: inventoryResult.rejected_movements || [],
       audit_logs: changedAfter(auditLogs, pullSince, ['created_at']),
       sync_cursor: syncCursor,
     })
