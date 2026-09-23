@@ -19,8 +19,20 @@ let syncing = false
 let rerunRequested = false
 let timer = null
 
+function compactFingerprint(value) {
+  const text = JSON.stringify(value)
+  let first = 2166136261
+  let second = 2246822507
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index)
+    first = Math.imul(first ^ code, 16777619)
+    second = Math.imul(second ^ code, 3266489909)
+  }
+  return `v2:${text.length}:${(first >>> 0).toString(36)}:${(second >>> 0).toString(36)}`
+}
+
 function fingerprint(sale) {
-  return JSON.stringify({
+  return compactFingerprint({
     id: sale.id,
     receipt: sale.receipt,
     cashier: sale.cashier,
@@ -69,7 +81,7 @@ function saveFingerprints(value) {
 }
 
 function expenseFingerprint(expense) {
-  return JSON.stringify({
+  return compactFingerprint({
     id: expense.id,
     day: expense.day,
     amount: expense.amount,
@@ -99,7 +111,7 @@ function saveExpenseFingerprints(value) {
 }
 
 function inventoryFingerprint(operation) {
-  return JSON.stringify({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note, createdBy: operation.createdBy, createdAt: operation.createdAt })
+  return compactFingerprint({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note, createdBy: operation.createdBy, createdAt: operation.createdAt })
 }
 
 function inventoryFingerprints() {
@@ -112,7 +124,7 @@ function saveInventoryFingerprints(value) {
 }
 
 function inventoryRequestFingerprint(request) {
-  return JSON.stringify({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges, proposedNote: request.proposedNote, status: request.status, requestedBy: request.requestedBy, requestedAt: request.requestedAt, reviewNote: request.reviewNote })
+  return compactFingerprint({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges, proposedNote: request.proposedNote, status: request.status, requestedBy: request.requestedBy, requestedAt: request.requestedAt, reviewNote: request.reviewNote })
 }
 
 function inventoryRequestFingerprints() {
@@ -161,6 +173,59 @@ function currentInventoryProducts() {
 
 function currentInventoryChangeRequests() {
   return window.CL_POS?.getInventoryChangeRequests?.() || []
+}
+
+function recordTime(record, fields) {
+  for (const field of fields) {
+    const time = Date.parse(record?.[field] || '')
+    if (Number.isFinite(time)) return time
+  }
+  return Number.POSITIVE_INFINITY
+}
+
+function repairFingerprintCaches() {
+  const cursor = Date.parse(lastPullCursor())
+  if (!Number.isFinite(cursor)) return
+
+  const salesCache = fingerprints()
+  let salesChanged = false
+  currentSales().forEach(sale => {
+    if (salesCache[sale.id]?.startsWith?.('v2:')) return
+    if (recordTime(sale, ['updatedAt', 'editedAt', 'deletedAt', 'voidedAt', 'createdAt']) > cursor) return
+    salesCache[sale.id] = fingerprint(sale)
+    salesChanged = true
+  })
+  if (salesChanged) saveFingerprints(salesCache)
+
+  const expenseCache = expenseFingerprints()
+  let expensesChanged = false
+  currentExpenses().forEach(expense => {
+    if (expenseCache[expense.id]?.startsWith?.('v2:')) return
+    if (recordTime(expense, ['updatedAt', 'createdAt']) > cursor) return
+    expenseCache[expense.id] = expenseFingerprint(expense)
+    expensesChanged = true
+  })
+  if (expensesChanged) saveExpenseFingerprints(expenseCache)
+
+  const inventoryCache = inventoryFingerprints()
+  let inventoryChanged = false
+  currentInventoryOperations().forEach(operation => {
+    if (inventoryCache[operation.id]?.startsWith?.('v2:')) return
+    if (operation.syncStatus !== 'synced') return
+    inventoryCache[operation.id] = inventoryFingerprint(operation)
+    inventoryChanged = true
+  })
+  if (inventoryChanged) saveInventoryFingerprints(inventoryCache)
+
+  const requestCache = inventoryRequestFingerprints()
+  let requestsChanged = false
+  currentInventoryChangeRequests().forEach(request => {
+    if (requestCache[request.id]?.startsWith?.('v2:')) return
+    if (recordTime(request, ['updatedAt', 'reviewedAt', 'requestedAt']) > cursor) return
+    requestCache[request.id] = inventoryRequestFingerprint(request)
+    requestsChanged = true
+  })
+  if (requestsChanged) saveInventoryRequestFingerprints(requestCache)
 }
 
 function inventoryBaselines(operations) {
@@ -237,6 +302,7 @@ async function syncSales(options = {}) {
   syncing = true
   rerunRequested = false
   try {
+    repairFingerprintCaches()
     const previous = fingerprints()
     const sales = currentSales()
     const requestFingerprints = new Map(sales.map(sale => [sale.id, fingerprint(sale)]))
