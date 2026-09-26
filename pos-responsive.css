@@ -98,7 +98,22 @@
 .excel-paste-actions { display: flex; gap: 10px; align-items: center; margin-top: 9px; }
 .excel-paste-status { margin: 9px 0 0; font-size: 12px; line-height: 1.45; }
 .excel-paste-status.error { color: #8f1f1f; }
-.modal:has(#receivingPlanForm) { width: min(760px, 100%); }
+.modal:has(#receivingPlanForm),
+.modal:has(.receiving-detail),
+.modal:has(.receiving-inspect-form) { width: min(1120px, calc(100vw - 40px)); }
+.receiving-owner-note { margin: 14px 0; padding: 14px 16px; border: 3px solid var(--ink); border-radius: 8px; background: #fff1a8; box-shadow: 4px 4px 0 var(--ink); }
+.receiving-owner-note span { display: block; margin-bottom: 5px; font-size: 10px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
+.receiving-owner-note p { margin: 0; font-size: 14px; font-weight: 800; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.receiving-note-flag { display: block; width: max-content; margin-top: 6px; padding: 3px 7px; border: 2px solid var(--ink); border-radius: 999px; background: var(--yellow); color: var(--ink); font-size: 9px; font-weight: 950; }
+.receiving-detail .table-wrap { overflow-x: visible; }
+.receiving-detail table { width: 100%; table-layout: fixed; }
+.receiving-detail th, .receiving-detail td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.receiving-detail th:nth-child(1) { width: 24%; }
+.receiving-detail th:nth-child(2) { width: 24%; }
+.receiving-detail th:nth-child(3), .receiving-detail th:nth-child(4), .receiving-detail th:nth-child(5) { width: 9%; }
+.receiving-detail th:nth-child(6) { width: 25%; }
+.receiving-inspect-form .receiving-item { grid-template-columns: minmax(240px, 1.5fr) minmax(110px, .4fr) minmax(220px, 1fr); }
+#receivingOwnerNote, #receivingCashierNote { width: 100%; min-height: 88px; resize: vertical; border: 3px solid var(--ink); border-radius: 6px; padding: 11px; background: #fff; font: inherit; }
 .report-controls { margin-top: 18px; padding: 15px; border: 3px solid var(--ink); border-radius: 8px; background: var(--white); box-shadow: 5px 5px 0 var(--ink); }
 .report-controls label { margin: 0; min-width: 0; }
 .report-controls input, .report-controls select { width: 100%; min-width: 0; border: 2px solid var(--ink); border-radius: 6px; background: #fff; padding: 9px 10px; }
@@ -155,6 +170,20 @@ body[data-theme="classic"] .dashboard-period-button.active { background: var(--g
   .cashier-payments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-actions { align-items: stretch; flex-direction: column; }
   .report-actions .primary, .report-actions .secondary { width: 100%; }
+  .modal:has(#receivingPlanForm), .modal:has(.receiving-detail), .modal:has(.receiving-inspect-form) { width: 100%; }
+  .receiving-inspect-form .receiving-item { grid-template-columns: 1fr; }
+  .receiving-detail table, .receiving-detail thead, .receiving-detail tbody, .receiving-detail tr, .receiving-detail th, .receiving-detail td { display: block; width: 100%; }
+  .receiving-detail thead { display: none; }
+  .receiving-detail tr { margin-bottom: 12px; padding: 10px; border: 3px solid var(--ink); border-radius: 8px; background: #fff; }
+  .receiving-detail td { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; padding: 7px 0 !important; border-bottom: 1px dashed #8b8b8b !important; }
+  .receiving-detail td:last-child { border-bottom: 0 !important; }
+  .receiving-detail td::before { font-size: 10px; font-weight: 950; text-transform: uppercase; }
+  .receiving-detail td:nth-child(1)::before { content: 'Barang'; }
+  .receiving-detail td:nth-child(2)::before { content: 'Varian supplier'; }
+  .receiving-detail td:nth-child(3)::before { content: 'Pesanan'; }
+  .receiving-detail td:nth-child(4)::before { content: 'Datang'; }
+  .receiving-detail td:nth-child(5)::before { content: 'Selisih'; }
+  .receiving-detail td:nth-child(6)::before { content: 'Keterangan'; }
 }
 
 @media (min-width: 701px) and (max-width: 1180px) {
