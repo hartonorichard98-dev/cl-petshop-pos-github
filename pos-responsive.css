@@ -87,9 +87,12 @@
   .checkout .primary { padding: 9px 10px; }
 }
 
-.product-admin-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 14px 18px; border-bottom: 3px solid var(--ink); background: var(--paper); }
+.product-admin-tools { display: grid; grid-template-columns: minmax(0, 1fr) 180px minmax(320px, auto); gap: 10px; align-items: end; padding: 14px 18px; border-bottom: 3px solid var(--ink); background: var(--paper); }
 .product-admin-tools label { margin: 0; }
 .product-admin-tools small { color: #5f655f; }
+.product-admin-tools > small { grid-column: 1 / -1; }
+.product-data-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.product-data-actions button { width: auto; min-height: 42px; white-space: nowrap; }
 .product-table-scroll { max-height: calc(100dvh - 275px); overflow: auto; overscroll-behavior: contain; }
 .product-table-scroll thead { position: sticky; top: 0; z-index: 2; }
 .excel-paste-box { margin-top: 16px; padding: 14px; border: 3px solid var(--ink); border-radius: 8px; background: #fff8d8; }
