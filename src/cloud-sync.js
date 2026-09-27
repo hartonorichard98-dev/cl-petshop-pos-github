@@ -327,6 +327,7 @@ async function syncSales(options = {}) {
     const changedRequests = inventoryChangeRequests.filter(request => previousInventoryRequestFingerprints[request.id] !== requestChangeFingerprints.get(request.id))
     const requestBatch = changedRequests.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length
+    const pullCursor = sales.length ? lastPullCursor() : ''
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const syncRequest = async payload => {
@@ -340,7 +341,7 @@ async function syncSales(options = {}) {
           body: JSON.stringify({
             username: credentials.username,
             pin: credentials.pin,
-            pullSince: lastPullCursor(),
+            pullSince: pullCursor,
             ...payload,
           }),
         })
