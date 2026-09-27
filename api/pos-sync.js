@@ -28,6 +28,11 @@ function validCursor(value) {
   return cursor && Number.isFinite(Date.parse(cursor)) ? cursor : ''
 }
 
+function validDate(value) {
+  const date = String(value || '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : ''
+}
+
 function changedAfter(rows, cursor, fields) {
   if (!Array.isArray(rows) || !cursor) return Array.isArray(rows) ? rows : []
   const since = Date.parse(cursor)
@@ -53,6 +58,8 @@ export default async function handler(request, response) {
   const username = String(request.body?.username || '').trim().toLowerCase()
   const pin = String(request.body?.pin || '')
   const pullSince = validCursor(request.body?.pullSince)
+  const historyFrom = validDate(request.body?.historyFrom)
+  const historyTo = validDate(request.body?.historyTo)
   const syncCursor = new Date().toISOString()
   const sales = Array.isArray(request.body?.sales) ? request.body.sales : []
   const expenses = Array.isArray(request.body?.expenses) ? request.body.expenses : []
@@ -61,6 +68,47 @@ export default async function handler(request, response) {
   const inventoryRequests = Array.isArray(request.body?.inventoryRequests) ? request.body.inventoryRequests : []
   if (!/^[a-z0-9._-]{2,40}$/.test(username) || !/^\d{4,12}$/.test(pin)) {
     return json(response, 401, { error: 'Login cloud tidak valid' })
+  }
+  if (historyFrom || historyTo) {
+    if (!historyFrom || !historyTo || historyFrom > historyTo) {
+      return json(response, 400, { error: 'Periode transaksi tidak valid' })
+    }
+    try {
+      const historyResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_sales_range`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_api_secret: syncSecret,
+          p_store_id: storeId,
+          p_username: username,
+          p_pin: pin,
+          p_from: historyFrom,
+          p_to: historyTo,
+        }),
+      })
+      const historyText = await historyResponse.text()
+      const historyResult = historyText ? JSON.parse(historyText) : {}
+      if (!historyResponse.ok) {
+        const historyMessage = String(historyResult?.message || '')
+        if (historyMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+        return json(response, 502, { error: 'Supabase gagal membaca transaksi' })
+      }
+      const historySales = Array.isArray(historyResult?.sales) ? historyResult.sales : []
+      return json(response, 200, {
+        role: historyResult?.role || 'cashier',
+        sales: historySales,
+        sales_total: historySales.length,
+        history_from: historyFrom,
+        history_to: historyTo,
+      })
+    } catch (error) {
+      console.error('[pos-sync] history query failed', error)
+      return json(response, 502, { error: 'Cloud tidak dapat membaca transaksi' })
+    }
   }
   if (sales.length > MAX_SALES_PER_SYNC) {
     return json(response, 413, { error: 'Antrean transaksi terlalu besar' })
