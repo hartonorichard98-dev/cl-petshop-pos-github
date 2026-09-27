@@ -329,25 +329,49 @@ async function syncSales(options = {}) {
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-    const response = await fetch(SYNC_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        username: credentials.username,
-        pin: credentials.pin,
-        pullSince: lastPullCursor(),
-        sales: salesBatch.map(cloudPayloadSale),
-        expenses: expenseBatch.map(cloudPayloadExpense),
-        inventoryProducts: inventoryBaselines(movementBatch),
-        movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
-        inventoryRequests: requestBatch.map(request => ({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges || [], proposedNote: request.proposedNote || '', status: request.status || 'pending', requestedBy: request.requestedBy || '', requestedAt: request.requestedAt || request.createdAt, reviewNote: request.reviewNote || '' })),
-      }),
-    }).finally(() => clearTimeout(timeout))
-    const result = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`)
+    const syncRequest = async payload => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      try {
+        const response = await fetch(SYNC_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            username: credentials.username,
+            pin: credentials.pin,
+            pullSince: lastPullCursor(),
+            ...payload,
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+        return { response, result }
+      } finally {
+        clearTimeout(timeout)
+      }
+    }
+    const pendingPayload = {
+      sales: salesBatch.map(cloudPayloadSale),
+      expenses: expenseBatch.map(cloudPayloadExpense),
+      inventoryProducts: inventoryBaselines(movementBatch),
+      movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
+      inventoryRequests: requestBatch.map(request => ({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges || [], proposedNote: request.proposedNote || '', status: request.status || 'pending', requestedBy: request.requestedBy || '', requestedAt: request.requestedAt || request.createdAt, reviewNote: request.reviewNote || '' })),
+    }
+    let { response, result } = await syncRequest(pendingPayload)
+    let pushRecoveredWithPullOnly = false
+    if (!response.ok && pendingCount) {
+      console.warn('[CL POS] cloud push gagal; mencoba pull cloud terpisah', result.error || response.status)
+      const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [] })
+      if (recovery.response.ok) {
+        result = recovery.result
+        pushRecoveredWithPullOnly = true
+        setStatus(`Cloud tersambung · antrean lokal ${pendingCount} belum terkirim`, 'syncing')
+      } else {
+        throw new Error(result.error || `HTTP ${response.status}`)
+      }
+    } else if (!response.ok) {
+      throw new Error(result.error || `HTTP ${response.status}`)
+    }
 
     const latestBeforeMerge = currentSales()
     const latestFingerprints = new Map(latestBeforeMerge.map(sale => [sale.id, fingerprint(sale)]))
@@ -382,7 +406,7 @@ async function syncSales(options = {}) {
       const local = current.get(sale.id)
       if (local && !preserved.has(sale.id)) next[sale.id] = fingerprint(local)
     })
-    salesBatch.forEach(sale => {
+    if (!pushRecoveredWithPullOnly) salesBatch.forEach(sale => {
       const local = current.get(sale.id)
       const sentFingerprint = requestFingerprints.get(sale.id)
       if (local && fingerprint(local) === sentFingerprint) next[sale.id] = sentFingerprint
@@ -398,7 +422,7 @@ async function syncSales(options = {}) {
       const local = currentExpenseMap.get(expense.id)
       if (local) nextExpenseFingerprints[expense.id] = expenseFingerprint(local)
     })
-    expenseBatch.forEach(expense => {
+    if (!pushRecoveredWithPullOnly) expenseBatch.forEach(expense => {
       const local = currentExpenseMap.get(expense.id)
       const sentFingerprint = requestExpenseFingerprints.get(expense.id)
       if (local && expenseFingerprint(local) === sentFingerprint) nextExpenseFingerprints[expense.id] = sentFingerprint
@@ -414,7 +438,7 @@ async function syncSales(options = {}) {
       const local = currentInventoryMap.get(movement.id)
       if (local) nextInventoryFingerprints[movement.id] = inventoryFingerprint(local)
     })
-    movementBatch.forEach(operation => {
+    if (!pushRecoveredWithPullOnly) movementBatch.forEach(operation => {
       const local = currentInventoryMap.get(operation.id)
       const sentFingerprint = requestInventoryFingerprints.get(operation.id)
       if (local && inventoryFingerprint(local) === sentFingerprint) nextInventoryFingerprints[operation.id] = sentFingerprint
@@ -428,7 +452,7 @@ async function syncSales(options = {}) {
       const local = currentRequestMap.get(request.id)
       if (local) nextRequestFingerprints[request.id] = inventoryRequestFingerprint(local)
     })
-    requestBatch.forEach(request => {
+    if (!pushRecoveredWithPullOnly) requestBatch.forEach(request => {
       const local = currentRequestMap.get(request.id)
       const sentFingerprint = requestChangeFingerprints.get(request.id)
       if (local && inventoryRequestFingerprint(local) === sentFingerprint) nextRequestFingerprints[request.id] = sentFingerprint
@@ -443,7 +467,9 @@ async function syncSales(options = {}) {
     const pendingExpenses = [...currentExpenseMap.values()].some(expense => nextExpenseFingerprints[expense.id] !== expenseFingerprint(expense))
     const pendingInventory = [...currentInventoryMap.values()].some(operation => nextInventoryFingerprints[operation.id] !== inventoryFingerprint(operation))
     const pendingRequests = [...currentRequestMap.values()].some(request => nextRequestFingerprints[request.id] !== inventoryRequestFingerprint(request))
-    if (pendingSales || pendingExpenses || pendingInventory || pendingRequests) {
+    if (pushRecoveredWithPullOnly) {
+      setStatus(`Cloud tersambung · ${pendingCount} perubahan lokal perlu dicoba ulang`, 'syncing')
+    } else if (pendingSales || pendingExpenses || pendingInventory || pendingRequests) {
       rerunRequested = true
       setStatus('Mengirim perubahan terbaru…', 'syncing')
     } else {
