@@ -266,7 +266,7 @@
   <div id="modal" class="modal-bg hidden"><div class="modal" id="modalBody"></div></div>
   <script src="./price-list-data.js"></script>
   <script>
-    const KEY='cl-petshop-standalone-v1',THEME_KEY='cl-petshop-theme-v1',SESSION_KEY='cl-petshop-session-v1',VIEW_KEY='cl-petshop-last-view-v1',RESET_KEY='cl-petshop-operational-reset-2026-09-23-real-data-v2';
+    const KEY='cl-petshop-standalone-v1',THEME_KEY='cl-petshop-theme-v1',SESSION_KEY='cl-petshop-session-v1',VIEW_KEY='cl-petshop-last-view-v1',RESET_KEY='cl-petshop-operational-reset-2026-09-28-real-data-v3';
     const fallbackProducts=[{id:1,sku:'CL-001',name:'Makanan Kucing Adult 1 kg',sell:45000,cost:34000,stock:24,active:true},{id:2,sku:'CL-002',name:'Pasir Kucing 10 L',sell:65000,cost:49000,stock:18,active:true},{id:3,sku:'CL-003',name:'Snack Kucing Tuna',sell:15000,cost:9500,stock:40,active:true},{id:4,sku:'CL-004',name:'Shampoo Pet 250 ml',sell:38000,cost:27000,stock:12,active:true}];
     const seed={users:[{username:'owner',pin:'123456',name:'Owner CL Petshop',role:'admin'},{username:'kasir',pin:'1234',name:'Kasir CL Petshop',role:'cashier'}],products:(window.CL_PRICE_LIST||fallbackProducts).map(product=>({...product})),sales:[],expenses:[],inventoryOperations:[],inventoryChangeRequests:[],receivings:[],closings:[],auditLogs:[],settings:{theme:'neo'},priceListVersion:window.CL_PRICE_LIST_VERSION||null};
     let data=JSON.parse(localStorage.getItem(KEY)||'null')||seed,user=null,cart=[],paymentMethod='cash',splitEnabled=false,purchaseStatsCache=null,catalogCache=null,productRenderLimit=48,productAdminRenderLimit=48,skuReportRenderLimit=48,searchFrame=0,expenseReportPeriod='day',expenseReportSort='newest',closingHistoryDate='';
