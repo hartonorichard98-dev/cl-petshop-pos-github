@@ -41,6 +41,27 @@ async function fetchHistoryRange(from, to) {
   }
 }
 
+async function fetchSalesSummary(from, to) {
+  if (!credentials || !navigator.onLine) return { ok: false, error: 'Cloud tidak tersedia' }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ username: credentials.username, pin: credentials.pin, summaryFrom: from, summaryTo: to }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) return { ok: false, error: result.error || 'Supabase gagal membaca ringkasan' }
+    return { ok: true, monthly: result.monthly || {}, yearly: result.yearly || {}, role: result.role }
+  } catch (error) {
+    return { ok: false, error: error?.name === 'AbortError' ? 'Cloud terlalu lama merespons' : 'Cloud tidak dapat membaca ringkasan' }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 function compactFingerprint(value) {
   const text = JSON.stringify(value)
   let first = 2166136261
@@ -543,6 +564,7 @@ function startSync(detail) {
 }
 
 window.CL_POS.fetchHistoryRange = fetchHistoryRange
+window.CL_POS.fetchSalesSummary = fetchSalesSummary
 
 window.addEventListener('cl-pos-login', event => startSync(event.detail))
 window.addEventListener('cl-pos-data-changed', () => syncSales({ rerun: true }))

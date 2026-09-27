@@ -60,6 +60,8 @@ export default async function handler(request, response) {
   const pullSince = validCursor(request.body?.pullSince)
   const historyFrom = validDate(request.body?.historyFrom)
   const historyTo = validDate(request.body?.historyTo)
+  const summaryFrom = validDate(request.body?.summaryFrom)
+  const summaryTo = validDate(request.body?.summaryTo)
   const syncCursor = new Date().toISOString()
   const sales = Array.isArray(request.body?.sales) ? request.body.sales : []
   const expenses = Array.isArray(request.body?.expenses) ? request.body.expenses : []
@@ -108,6 +110,46 @@ export default async function handler(request, response) {
     } catch (error) {
       console.error('[pos-sync] history query failed', error)
       return json(response, 502, { error: 'Cloud tidak dapat membaca transaksi' })
+    }
+  }
+  if (summaryFrom || summaryTo) {
+    if (!summaryFrom || !summaryTo || summaryFrom > summaryTo) {
+      return json(response, 400, { error: 'Periode ringkasan tidak valid' })
+    }
+    try {
+      const summaryResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_sales_summary`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_api_secret: syncSecret,
+          p_store_id: storeId,
+          p_username: username,
+          p_pin: pin,
+          p_from: summaryFrom,
+          p_to: summaryTo,
+        }),
+      })
+      const summaryText = await summaryResponse.text()
+      const summaryResult = summaryText ? JSON.parse(summaryText) : {}
+      if (!summaryResponse.ok) {
+        const summaryMessage = String(summaryResult?.message || '')
+        if (summaryMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+        return json(response, 502, { error: 'Supabase gagal membaca ringkasan' })
+      }
+      return json(response, 200, {
+        role: summaryResult?.role || 'cashier',
+        monthly: summaryResult?.monthly || {},
+        yearly: summaryResult?.yearly || {},
+        summary_from: summaryFrom,
+        summary_to: summaryTo,
+      })
+    } catch (error) {
+      console.error('[pos-sync] summary query failed', error)
+      return json(response, 502, { error: 'Cloud tidak dapat membaca ringkasan' })
     }
   }
   if (sales.length > MAX_SALES_PER_SYNC) {
