@@ -6,6 +6,7 @@ const INVENTORY_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-fingerprints-v1'
 const INVENTORY_REQUEST_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-request-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
 const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v2'
+const POPULAR_PRODUCTS_KEY = 'cl-petshop-popular-products-v1'
 const POLL_MS = 30000
 const REQUEST_TIMEOUT_MS = 30000
 const SALES_BATCH_SIZE = 100
@@ -60,6 +61,42 @@ async function fetchSalesSummary(from, to) {
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function fetchPopularProducts(limit = 48) {
+  if (!credentials || !navigator.onLine) return { ok: false, error: 'Cloud tidak tersedia' }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ username: credentials.username, pin: credentials.pin, popularLimit: limit }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) return { ok: false, error: result.error || 'Supabase gagal membaca produk terlaris' }
+    return { ok: true, products: Array.isArray(result.products) ? result.products : [], role: result.role }
+  } catch (error) {
+    return { ok: false, error: error?.name === 'AbortError' ? 'Cloud terlalu lama merespons' : 'Cloud tidak dapat membaca produk terlaris' }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function dispatchPopularProducts(products) {
+  window.dispatchEvent(new CustomEvent('cl-pos-popular-products', { detail: { products } }))
+}
+
+async function loadPopularProducts() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(POPULAR_PRODUCTS_KEY) || '[]')
+    if (Array.isArray(cached) && cached.length) dispatchPopularProducts(cached)
+  } catch {}
+  const result = await fetchPopularProducts(48)
+  if (!result.ok) return
+  localStorage.setItem(POPULAR_PRODUCTS_KEY, JSON.stringify(result.products))
+  dispatchPopularProducts(result.products)
 }
 
 function compactFingerprint(value) {
@@ -559,12 +596,14 @@ async function syncSales(options = {}) {
 function startSync(detail) {
   credentials = detail
   clearInterval(timer)
+  loadPopularProducts()
   syncSales()
   timer = setInterval(syncSales, POLL_MS)
 }
 
 window.CL_POS.fetchHistoryRange = fetchHistoryRange
 window.CL_POS.fetchSalesSummary = fetchSalesSummary
+window.CL_POS.fetchPopularProducts = fetchPopularProducts
 
 window.addEventListener('cl-pos-login', event => startSync(event.detail))
 window.addEventListener('cl-pos-data-changed', () => syncSales({ rerun: true }))

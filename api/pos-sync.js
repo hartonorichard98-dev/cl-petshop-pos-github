@@ -62,6 +62,7 @@ export default async function handler(request, response) {
   const historyTo = validDate(request.body?.historyTo)
   const summaryFrom = validDate(request.body?.summaryFrom)
   const summaryTo = validDate(request.body?.summaryTo)
+  const popularLimit = Math.min(100, Math.max(0, Number(request.body?.popularLimit) || 0))
   const syncCursor = new Date().toISOString()
   const sales = Array.isArray(request.body?.sales) ? request.body.sales : []
   const expenses = Array.isArray(request.body?.expenses) ? request.body.expenses : []
@@ -150,6 +151,39 @@ export default async function handler(request, response) {
     } catch (error) {
       console.error('[pos-sync] summary query failed', error)
       return json(response, 502, { error: 'Cloud tidak dapat membaca ringkasan' })
+    }
+  }
+  if (popularLimit) {
+    try {
+      const popularResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_popular_products`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_api_secret: syncSecret,
+          p_store_id: storeId,
+          p_username: username,
+          p_pin: pin,
+          p_limit: popularLimit,
+        }),
+      })
+      const popularText = await popularResponse.text()
+      const popularResult = popularText ? JSON.parse(popularText) : {}
+      if (!popularResponse.ok) {
+        const popularMessage = String(popularResult?.message || '')
+        if (popularMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+        return json(response, 502, { error: 'Supabase gagal membaca produk terlaris' })
+      }
+      return json(response, 200, {
+        role: popularResult?.role || 'cashier',
+        products: Array.isArray(popularResult?.products) ? popularResult.products : [],
+      })
+    } catch (error) {
+      console.error('[pos-sync] popular products query failed', error)
+      return json(response, 502, { error: 'Cloud tidak dapat membaca produk terlaris' })
     }
   }
   if (sales.length > MAX_SALES_PER_SYNC) {
