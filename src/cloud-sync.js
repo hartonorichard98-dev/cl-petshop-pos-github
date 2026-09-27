@@ -361,8 +361,7 @@ async function syncSales(options = {}) {
     const changedRequests = inventoryChangeRequests.filter(request => previousInventoryRequestFingerprints[request.id] !== requestChangeFingerprints.get(request.id))
     const requestBatch = changedRequests.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length
-    const fullPullRequested = needsFullPull()
-    const pullCursor = fullPullRequested || !sales.length ? '' : lastPullCursor()
+    const pullCursor = lastPullCursor() || new Date(Date.now() - 10 * 60 * 1000).toISOString()
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const syncRequest = async (payload, pullSinceOverride = pullCursor) => {
@@ -409,14 +408,6 @@ async function syncSales(options = {}) {
       throw new Error(result.error || `HTTP ${response.status}`)
     }
 
-    if (Number(result.sales_total) > sales.length) {
-      const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [] }, '')
-      if (recovery.response.ok) {
-        result = recovery.result
-        pushRecoveredWithPullOnly = true
-      }
-    }
-
     const latestBeforeMerge = currentSales()
     const latestFingerprints = new Map(latestBeforeMerge.map(sale => [sale.id, fingerprint(sale)]))
     const preserveIds = latestBeforeMerge
@@ -453,7 +444,7 @@ async function syncSales(options = {}) {
       setStatus(`Cloud tersambung · ${mergedSalesCount.toLocaleString('id-ID')} transaksi`, 'online')
     } else {
       saveLastPullCursor(result.sync_cursor)
-      if (fullPullRequested || pushRecoveredWithPullOnly) markFullPullComplete()
+      if (pushRecoveredWithPullOnly) markFullPullComplete()
     }
 
     const next = fingerprints()
