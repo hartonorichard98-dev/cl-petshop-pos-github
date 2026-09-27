@@ -137,23 +137,29 @@ export default async function handler(request, response) {
       }
     }
 
-    const cloudResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_and_pull`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        p_api_secret: syncSecret,
-        p_store_id: storeId,
-        p_username: username,
-        p_pin: pin,
-        p_sales: normalizedSales,
-      }),
-    })
-    const text = await cloudResponse.text()
-    const result = text ? JSON.parse(text) : {}
+    let cloudResponse
+    let result = {}
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      cloudResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_and_pull`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_api_secret: syncSecret,
+          p_store_id: storeId,
+          p_username: username,
+          p_pin: pin,
+          p_sales: normalizedSales,
+        }),
+      })
+      const text = await cloudResponse.text()
+      result = text ? JSON.parse(text) : {}
+      if (cloudResponse.ok || attempt === 2) break
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
+    }
     if (!cloudResponse.ok) {
       const cloudMessage = String(result?.message || '')
       console.error('[pos-sync] Supabase rejected batch', {
