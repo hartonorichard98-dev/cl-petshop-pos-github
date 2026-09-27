@@ -420,8 +420,20 @@ async function syncSales(options = {}) {
     if (Array.isArray(result.rejected_inventory_movements) && result.rejected_inventory_movements.length) {
       window.CL_POS?.rejectCloudInventoryMovements?.(result.rejected_inventory_movements)
     }
-    saveLastPullCursor(result.sync_cursor)
-    if (fullPullRequested || pushRecoveredWithPullOnly) markFullPullComplete()
+    const mergedSalesCount = currentSales().length
+    let persistedSalesCount = mergedSalesCount
+    try {
+      const stored = JSON.parse(localStorage.getItem('cl-petshop-standalone-v1') || 'null')
+      persistedSalesCount = Array.isArray(stored?.sales) ? stored.sales.length : 0
+    } catch {}
+    if (persistedSalesCount < mergedSalesCount) {
+      localStorage.removeItem(fullPullKey())
+      localStorage.removeItem(lastPullKey())
+      setStatus(`Cloud tersambung · ${mergedSalesCount.toLocaleString('id-ID')} transaksi`, 'online')
+    } else {
+      saveLastPullCursor(result.sync_cursor)
+      if (fullPullRequested || pushRecoveredWithPullOnly) markFullPullComplete()
+    }
 
     const next = fingerprints()
     const preserved = new Set(preserveIds)
