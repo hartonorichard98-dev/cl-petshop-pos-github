@@ -5,8 +5,9 @@ const EXPENSE_FINGERPRINTS_KEY = 'cl-petshop-cloud-expense-fingerprints-v1'
 const INVENTORY_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-fingerprints-v1'
 const INVENTORY_REQUEST_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-request-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
+const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v1'
 const POLL_MS = 30000
-const REQUEST_TIMEOUT_MS = 12000
+const REQUEST_TIMEOUT_MS = 30000
 const SALES_BATCH_SIZE = 100
 const EXPENSE_BATCH_SIZE = 100
 const MOVEMENT_BATCH_SIZE = 200
@@ -149,6 +150,18 @@ function saveLastPullCursor(value) {
   if (Number.isFinite(Date.parse(value))) {
     try { localStorage.setItem(lastPullKey(), value) } catch (error) { if (error?.name !== 'QuotaExceededError') throw error }
   }
+}
+
+function fullPullKey() {
+  return `${FULL_PULL_KEY_PREFIX}:${credentials?.username || 'unknown'}`
+}
+
+function needsFullPull() {
+  return localStorage.getItem(fullPullKey()) !== 'done'
+}
+
+function markFullPullComplete() {
+  try { localStorage.setItem(fullPullKey(), 'done') } catch {}
 }
 
 function setStatus(message, state = 'local') {
@@ -327,7 +340,8 @@ async function syncSales(options = {}) {
     const changedRequests = inventoryChangeRequests.filter(request => previousInventoryRequestFingerprints[request.id] !== requestChangeFingerprints.get(request.id))
     const requestBatch = changedRequests.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length
-    const pullCursor = sales.length ? lastPullCursor() : ''
+    const fullPullRequested = needsFullPull()
+    const pullCursor = fullPullRequested || !sales.length ? '' : lastPullCursor()
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const syncRequest = async payload => {
@@ -360,7 +374,7 @@ async function syncSales(options = {}) {
     }
     let { response, result } = await syncRequest(pendingPayload)
     let pushRecoveredWithPullOnly = false
-    if (!response.ok && pendingCount) {
+    if (!response.ok) {
       console.warn('[CL POS] cloud push gagal; mencoba pull cloud terpisah', result.error || response.status)
       const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [] })
       if (recovery.response.ok) {
@@ -399,6 +413,7 @@ async function syncSales(options = {}) {
       window.CL_POS?.rejectCloudInventoryMovements?.(result.rejected_inventory_movements)
     }
     saveLastPullCursor(result.sync_cursor)
+    if (fullPullRequested || pushRecoveredWithPullOnly) markFullPullComplete()
 
     const next = fingerprints()
     const preserved = new Set(preserveIds)
@@ -474,7 +489,7 @@ async function syncSales(options = {}) {
       rerunRequested = true
       setStatus('Mengirim perubahan terbaru…', 'syncing')
     } else {
-      setStatus('Cloud tersambung · data terbaru', 'online')
+      setStatus(`Cloud tersambung · ${currentSales().length.toLocaleString('id-ID')} transaksi`, 'online')
     }
   } catch (error) {
     console.warn('[CL POS] cloud sync:', error)
