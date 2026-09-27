@@ -5,7 +5,7 @@ const EXPENSE_FINGERPRINTS_KEY = 'cl-petshop-cloud-expense-fingerprints-v1'
 const INVENTORY_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-fingerprints-v1'
 const INVENTORY_REQUEST_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-request-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
-const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v1'
+const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v2'
 const POLL_MS = 30000
 const REQUEST_TIMEOUT_MS = 30000
 const SALES_BATCH_SIZE = 100
@@ -344,7 +344,7 @@ async function syncSales(options = {}) {
     const pullCursor = fullPullRequested || !sales.length ? '' : lastPullCursor()
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
-    const syncRequest = async payload => {
+    const syncRequest = async (payload, pullSinceOverride = pullCursor) => {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
       try {
@@ -355,7 +355,7 @@ async function syncSales(options = {}) {
           body: JSON.stringify({
             username: credentials.username,
             pin: credentials.pin,
-            pullSince: pullCursor,
+            pullSince: pullSinceOverride,
             ...payload,
           }),
         })
@@ -386,6 +386,14 @@ async function syncSales(options = {}) {
       }
     } else if (!response.ok) {
       throw new Error(result.error || `HTTP ${response.status}`)
+    }
+
+    if (Number(result.sales_total) > sales.length && pullCursor) {
+      const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [] }, '')
+      if (recovery.response.ok) {
+        result = recovery.result
+        pushRecoveredWithPullOnly = true
+      }
     }
 
     const latestBeforeMerge = currentSales()

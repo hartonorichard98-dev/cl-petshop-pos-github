@@ -261,6 +261,7 @@ export default async function handler(request, response) {
     }
     return json(response, 200, {
       ...result,
+      sales_total: Array.isArray(result.sales) ? result.sales.length : 0,
       sales: changedAfter(result.sales, pullSince, ['updated_at', 'created_at']),
       expenses: changedAfter(expenseResult.expenses, pullSince, ['updated_at', 'created_at']),
       inventory_movements: changedAfter(requestResult.movements || inventoryResult.movements, pullSince, ['updated_at', 'created_at']),
