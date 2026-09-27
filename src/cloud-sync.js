@@ -388,7 +388,7 @@ async function syncSales(options = {}) {
       throw new Error(result.error || `HTTP ${response.status}`)
     }
 
-    if (Number(result.sales_total) > sales.length && pullCursor) {
+    if (Number(result.sales_total) > sales.length) {
       const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [] }, '')
       if (recovery.response.ok) {
         result = recovery.result
