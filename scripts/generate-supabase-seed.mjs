@@ -21,8 +21,17 @@ const products = context.window.CL_PRICE_LIST.map((product) => ({
   t: Boolean(product.trackStock),
   v: Boolean(product.active),
   r: {
-    tierMin: Math.max(1, Math.round(Number(product.tierMin || 1))),
-    isTier: Boolean(product.isTier),
+    tiers: Array.isArray(product.tiers)
+      ? product.tiers.map((tier) => ({
+        minQty: Math.max(1, Math.round(Number(tier.minQty || 1))),
+        sell: Number(tier.sell || 0),
+        cost: Number(tier.cost || 0),
+      }))
+      : [{
+        minQty: Math.max(1, Math.round(Number(product.tierMin || 1))),
+        sell: Number(product.sell || 0),
+        cost: Number(product.cost || 0),
+      }],
     needsPrice: Boolean(product.needsPrice),
   },
 }))
