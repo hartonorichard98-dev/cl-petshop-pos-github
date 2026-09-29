@@ -109,7 +109,7 @@ def main() -> None:
 
     payload = json.dumps(products, ensure_ascii=False, separators=(',', ':'))
     destination.write_text(
-        "window.CL_PRICE_LIST_VERSION='2026-09-29-database-q4-v2';\n"
+        "window.CL_PRICE_LIST_VERSION='2026-09-29-database-q4-v3';\n"
         f'window.CL_PRICE_LIST={payload};\n',
         encoding='utf-8',
     )
