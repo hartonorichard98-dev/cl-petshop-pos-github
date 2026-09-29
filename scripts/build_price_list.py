@@ -65,6 +65,8 @@ def main() -> None:
         primary = next((row for row in priced_rows if row['minQty'] == 1), priced_rows[0] if priced_rows else group['rows'][0])
         tiers_by_minimum = OrderedDict()
         for row in priced_rows:
+            if row['minQty'] in tiers_by_minimum:
+                raise ValueError(f"Tangga harga {row['minQty']}+ duplikat untuk {group['name']}")
             tiers_by_minimum[row['minQty']] = {
                 'minQty': row['minQty'],
                 'sell': row['sell'],
@@ -93,6 +95,17 @@ def main() -> None:
                 'needsPrice': not priced_rows,
             }
         )
+
+    generated_by_name = {product['baseName'].casefold(): product for product in products}
+    for group_name, group in groups.items():
+        product = generated_by_name[group_name]
+        generated_tiers = {tier['minQty']: tier for tier in product['tiers']}
+        for row in (item for item in group['rows'] if item['hasPrice']):
+            generated = generated_tiers.get(row['minQty'])
+            if not generated:
+                raise ValueError(f"Tangga harga {row['minQty']}+ hilang untuk {group['name']}")
+            if generated['sell'] != row['sell'] or generated['cost'] != row['cost']:
+                raise ValueError(f"Harga berubah saat generate untuk {group['name']} tier {row['minQty']}+")
 
     payload = json.dumps(products, ensure_ascii=False, separators=(',', ':'))
     destination.write_text(
