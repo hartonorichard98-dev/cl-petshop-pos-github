@@ -8,7 +8,7 @@ const RECEIVING_FINGERPRINTS_KEY = 'cl-petshop-cloud-receiving-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
 const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v2'
 const POPULAR_PRODUCTS_KEY = 'cl-petshop-popular-products-v1'
-const POLL_MS = 30000
+const POLL_MS = 120000
 const REQUEST_TIMEOUT_MS = 30000
 const SALES_BATCH_SIZE = 100
 const EXPENSE_BATCH_SIZE = 100
@@ -497,7 +497,7 @@ async function syncSales(options = {}) {
     const changedReceivings = eligibleReceivings.filter(receiving => previousReceivingFingerprints[receiving.id] !== requestReceivingFingerprints.get(receiving.id))
     const receivingBatch = changedReceivings.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length + receivingBatch.length
-    const pullCursor = lastPullCursor() || new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const pullCursor = lastPullCursor()
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const syncRequest = async (payload, pullSinceOverride = pullCursor) => {

@@ -262,168 +262,48 @@ export default async function handler(request, response) {
       }
     }
 
-    let cloudResponse
-    let result = {}
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      cloudResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_and_pull`, {
+    const rpc = async (name, body) => fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
         method: 'POST',
         headers: {
           apikey: supabaseKey,
           Authorization: `Bearer ${supabaseKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          p_api_secret: syncSecret,
-          p_store_id: storeId,
-          p_username: username,
-          p_pin: pin,
-          p_sales: normalizedSales,
-        }),
+        body: JSON.stringify(body),
       })
-      const text = await cloudResponse.text()
-      result = text ? JSON.parse(text) : {}
-      if (cloudResponse.ok || attempt === 2) break
-      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
-    }
-    if (!cloudResponse.ok) {
-      const cloudMessage = String(result?.message || '')
-      console.error('[pos-sync] Supabase rejected batch', {
-        code: result?.code,
-        message: cloudMessage,
-        salesCount: sales.length,
-      })
-      if (cloudMessage.includes('Invalid POS login')) {
-        return json(response, 401, { error: 'Username atau PIN cloud salah' })
-      }
-      if (cloudMessage.includes('Cashier can only sync completed sales')) {
-        return json(response, 422, { error: 'Akun kasir hanya boleh mengirim transaksi selesai' })
-      }
-      if (cloudMessage.includes('Invalid sale payload') || cloudMessage.includes('invalid input syntax for type uuid')) {
-        return json(response, 422, { error: 'Ada data transaksi lokal yang tidak valid' })
-      }
-      return json(response, 502, { error: 'Supabase gagal menyimpan transaksi' })
-    }
-    const expenseResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_expenses`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        p_api_secret: syncSecret,
-        p_store_id: storeId,
-        p_username: username,
-        p_pin: pin,
+    const authBody = { p_api_secret: syncSecret, p_store_id: storeId, p_username: username, p_pin: pin }
+    const hasWrites = normalizedSales.length || normalizedExpenses.length || inventoryProducts.length || movements.length || inventoryRequests.length || receivings.length
+    let writeResult = {}
+    if (hasWrites) {
+      const writeResponse = await rpc('pos_write_batch', {
+        ...authBody,
+        p_sales: normalizedSales,
         p_expenses: normalizedExpenses,
-      }),
-    })
-    const expenseText = await expenseResponse.text()
-    const expenseResult = expenseText ? JSON.parse(expenseText) : {}
-    if (!expenseResponse.ok) {
-      const expenseMessage = String(expenseResult?.message || '')
-      console.error('[pos-sync] Supabase rejected expenses', { code: expenseResult?.code, message: expenseMessage, expensesCount: expenses.length })
-      if (expenseMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
-      return json(response, 502, { error: 'Supabase gagal menyimpan pengeluaran' })
-    }
-    const inventoryResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_inventory`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        p_api_secret: syncSecret,
-        p_store_id: storeId,
-        p_username: username,
-        p_pin: pin,
-        p_products: inventoryProducts,
+        p_inventory_products: inventoryProducts,
         p_movements: movements,
-      }),
-    })
-    const inventoryText = await inventoryResponse.text()
-    const inventoryResult = inventoryText ? JSON.parse(inventoryText) : {}
-    if (!inventoryResponse.ok) {
-      console.error('[pos-sync] Supabase rejected inventory movements', { code: inventoryResult?.code, message: inventoryResult?.message, movementsCount: movements.length })
-      if (String(inventoryResult?.message || '').includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
-      return json(response, 502, { error: 'Supabase gagal menyimpan perubahan stok' })
-    }
-    const requestResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_inventory_change_requests`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        p_api_secret: syncSecret,
-        p_store_id: storeId,
-        p_username: username,
-        p_pin: pin,
-        p_requests: inventoryRequests,
-      }),
-    })
-    const requestText = await requestResponse.text()
-    const requestResult = requestText ? JSON.parse(requestText) : {}
-    if (!requestResponse.ok) {
-      console.error('[pos-sync] Supabase rejected repack requests', { code: requestResult?.code, message: requestResult?.message, requestsCount: inventoryRequests.length })
-      if (String(requestResult?.message || '').includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
-      if (String(requestResult?.message || '').includes('Only owner')) return json(response, 403, { error: 'Hanya owner yang boleh menyetujui perubahan repack' })
-      return json(response, 502, { error: 'Supabase gagal menyimpan persetujuan repack' })
-    }
-    const receivingResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_receivings`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        p_api_secret: syncSecret,
-        p_store_id: storeId,
-        p_username: username,
-        p_pin: pin,
+        p_inventory_requests: inventoryRequests,
         p_receivings: receivings,
-      }),
-    })
-    const receivingText = await receivingResponse.text()
-    const receivingResult = receivingText ? JSON.parse(receivingText) : {}
-    if (!receivingResponse.ok) {
-      const receivingMessage = String(receivingResult?.message || '')
-      console.error('[pos-sync] Supabase rejected receivings', { code: receivingResult?.code, message: receivingMessage, receivingsCount: receivings.length })
-      if (receivingMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
-      return json(response, 502, { error: 'Supabase gagal menyimpan penerimaan' })
-    }
-    let auditLogs = []
-    if (result.role === 'owner') {
-      const auditResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_audit_logs`, {
-        method: 'POST',
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          p_api_secret: syncSecret,
-          p_store_id: storeId,
-          p_username: username,
-          p_pin: pin,
-        }),
       })
-      if (auditResponse.ok) auditLogs = await auditResponse.json()
+      const writeText = await writeResponse.text()
+      writeResult = writeText ? JSON.parse(writeText) : {}
+      if (!writeResponse.ok) {
+        const message = String(writeResult?.message || '')
+        console.error('[pos-sync] Supabase rejected write batch', { code: writeResult?.code, message })
+        if (message.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+        if (message.includes('Cashier can only sync completed sales')) return json(response, 422, { error: 'Akun kasir hanya boleh mengirim transaksi selesai' })
+        if (message.includes('Only owner')) return json(response, 403, { error: 'Hanya owner yang boleh menyetujui perubahan repack' })
+        if (message.includes('Invalid sale payload') || message.includes('invalid input syntax for type uuid')) return json(response, 422, { error: 'Ada data transaksi lokal yang tidak valid' })
+        return json(response, 502, { error: 'Supabase gagal menyimpan perubahan' })
+      }
     }
+    const deltaResponse = await rpc('pos_sync_delta', { ...authBody, p_since: pullSince || null })
+    const deltaText = await deltaResponse.text()
+    const result = deltaText ? JSON.parse(deltaText) : {}
+    if (!deltaResponse.ok) return json(response, 502, { error: 'Supabase gagal membaca pembaruan' })
     return json(response, 200, {
       ...result,
       sales_total: Array.isArray(result.sales) ? result.sales.length : 0,
-      sales: changedAfter(result.sales, pullSince, ['updated_at', 'created_at']),
-      expenses: changedAfter(expenseResult.expenses, pullSince, ['updated_at', 'created_at']),
-      inventory_movements: changedAfter(requestResult.movements || inventoryResult.movements, pullSince, ['updated_at', 'created_at']),
-      inventory_products: changedAfter(requestResult.products || inventoryResult.products, pullSince, ['updated_at', 'created_at']),
-      inventory_change_requests: changedAfter(requestResult.requests, pullSince, ['updated_at', 'requested_at']),
-      receivings: changedAfter(receivingResult.receivings, pullSince, ['updated_at', 'deleted_at', 'created_at', 'checked_at', 'approved_at']),
-      rejected_inventory_movements: inventoryResult.rejected_movements || [],
-      audit_logs: changedAfter(auditLogs, pullSince, ['created_at']),
+      rejected_inventory_movements: writeResult.rejected_inventory_movements || [],
       sync_cursor: syncCursor,
     })
   } catch (error) {
