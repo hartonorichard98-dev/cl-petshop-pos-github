@@ -69,6 +69,7 @@ export default async function handler(request, response) {
   const movements = Array.isArray(request.body?.movements) ? request.body.movements : []
   const inventoryProducts = Array.isArray(request.body?.inventoryProducts) ? request.body.inventoryProducts : []
   const inventoryRequests = Array.isArray(request.body?.inventoryRequests) ? request.body.inventoryRequests : []
+  const receivings = Array.isArray(request.body?.receivings) ? request.body.receivings : []
   if (!/^[a-z0-9._-]{2,40}$/.test(username) || !/^\d{4,12}$/.test(pin)) {
     return json(response, 401, { error: 'Login cloud tidak valid' })
   }
@@ -371,6 +372,29 @@ export default async function handler(request, response) {
       if (String(requestResult?.message || '').includes('Only owner')) return json(response, 403, { error: 'Hanya owner yang boleh menyetujui perubahan repack' })
       return json(response, 502, { error: 'Supabase gagal menyimpan persetujuan repack' })
     }
+    const receivingResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_sync_receivings`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_api_secret: syncSecret,
+        p_store_id: storeId,
+        p_username: username,
+        p_pin: pin,
+        p_receivings: receivings,
+      }),
+    })
+    const receivingText = await receivingResponse.text()
+    const receivingResult = receivingText ? JSON.parse(receivingText) : {}
+    if (!receivingResponse.ok) {
+      const receivingMessage = String(receivingResult?.message || '')
+      console.error('[pos-sync] Supabase rejected receivings', { code: receivingResult?.code, message: receivingMessage, receivingsCount: receivings.length })
+      if (receivingMessage.includes('Invalid POS login')) return json(response, 401, { error: 'Username atau PIN cloud salah' })
+      return json(response, 502, { error: 'Supabase gagal menyimpan penerimaan' })
+    }
     let auditLogs = []
     if (result.role === 'owner') {
       const auditResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/pos_pull_audit_logs`, {
@@ -397,6 +421,7 @@ export default async function handler(request, response) {
       inventory_movements: changedAfter(requestResult.movements || inventoryResult.movements, pullSince, ['updated_at', 'created_at']),
       inventory_products: changedAfter(requestResult.products || inventoryResult.products, pullSince, ['updated_at', 'created_at']),
       inventory_change_requests: changedAfter(requestResult.requests, pullSince, ['updated_at', 'requested_at']),
+      receivings: changedAfter(receivingResult.receivings, pullSince, ['updated_at', 'deleted_at', 'created_at', 'checked_at', 'approved_at']),
       rejected_inventory_movements: inventoryResult.rejected_movements || [],
       audit_logs: changedAfter(auditLogs, pullSince, ['created_at']),
       sync_cursor: syncCursor,

@@ -4,6 +4,7 @@ const FINGERPRINTS_KEY = 'cl-petshop-cloud-fingerprints-v3'
 const EXPENSE_FINGERPRINTS_KEY = 'cl-petshop-cloud-expense-fingerprints-v1'
 const INVENTORY_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-fingerprints-v1'
 const INVENTORY_REQUEST_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-request-fingerprints-v1'
+const RECEIVING_FINGERPRINTS_KEY = 'cl-petshop-cloud-receiving-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
 const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v2'
 const POPULAR_PRODUCTS_KEY = 'cl-petshop-popular-products-v1'
@@ -216,6 +217,38 @@ function saveInventoryRequestFingerprints(value) {
   saveCache(INVENTORY_REQUEST_FINGERPRINTS_KEY, Object.fromEntries(Object.entries(value).slice(-500)))
 }
 
+function receivingFingerprint(receiving) {
+  return compactFingerprint({
+    id: receiving.id,
+    number: receiving.number,
+    supplier: receiving.supplier,
+    reference: receiving.reference,
+    expectedDate: receiving.expectedDate,
+    ownerNote: receiving.ownerNote,
+    cashierNote: receiving.cashierNote,
+    reviewNote: receiving.reviewNote,
+    items: receiving.items,
+    status: receiving.status,
+    createdBy: receiving.createdBy,
+    checkedBy: receiving.checkedBy,
+    approvedBy: receiving.approvedBy,
+    createdAt: receiving.createdAt,
+    checkedAt: receiving.checkedAt,
+    approvedAt: receiving.approvedAt,
+    stockAppliedAt: receiving.stockAppliedAt,
+    updatedAt: receiving.updatedAt,
+  })
+}
+
+function receivingFingerprints() {
+  try { return JSON.parse(localStorage.getItem(RECEIVING_FINGERPRINTS_KEY) || '{}') || {} } catch { return {} }
+}
+
+function saveReceivingFingerprints(value) {
+  if (saveCache(RECEIVING_FINGERPRINTS_KEY, value)) return
+  saveCache(RECEIVING_FINGERPRINTS_KEY, Object.fromEntries(Object.entries(value).slice(-500)))
+}
+
 function lastPullKey() {
   return `${LAST_PULL_KEY_PREFIX}:${credentials?.username || 'unknown'}`
 }
@@ -265,6 +298,10 @@ function currentInventoryProducts() {
 
 function currentInventoryChangeRequests() {
   return window.CL_POS?.getInventoryChangeRequests?.() || []
+}
+
+function currentReceivings() {
+  return window.CL_POS?.getReceivings?.() || []
 }
 
 function recordTime(record, fields) {
@@ -318,6 +355,16 @@ function repairFingerprintCaches() {
     requestsChanged = true
   })
   if (requestsChanged) saveInventoryRequestFingerprints(requestCache)
+
+  const receivingCache = receivingFingerprints()
+  let receivingsChanged = false
+  currentReceivings().forEach(receiving => {
+    if (receivingCache[receiving.id]?.startsWith?.('v2:')) return
+    if (recordTime(receiving, ['updatedAt', 'approvedAt', 'checkedAt', 'createdAt']) > cursor) return
+    receivingCache[receiving.id] = receivingFingerprint(receiving)
+    receivingsChanged = true
+  })
+  if (receivingsChanged) saveReceivingFingerprints(receivingCache)
 }
 
 function inventoryBaselines(operations) {
@@ -385,6 +432,29 @@ function cloudPayloadExpense(expense) {
   }
 }
 
+function cloudPayloadReceiving(receiving) {
+  return {
+    id: receiving.id,
+    number: receiving.number,
+    supplier: receiving.supplier,
+    reference: receiving.reference || '',
+    expectedDate: receiving.expectedDate || '',
+    ownerNote: receiving.ownerNote || '',
+    cashierNote: receiving.cashierNote || '',
+    reviewNote: receiving.reviewNote || '',
+    items: Array.isArray(receiving.items) ? receiving.items : [],
+    status: receiving.status || 'waiting_check',
+    createdBy: receiving.createdBy || '',
+    checkedBy: receiving.checkedBy || '',
+    approvedBy: receiving.approvedBy || '',
+    createdAt: receiving.createdAt,
+    checkedAt: receiving.checkedAt || '',
+    approvedAt: receiving.approvedAt || '',
+    stockAppliedAt: receiving.stockAppliedAt || '',
+    updatedAt: receiving.updatedAt || receiving.createdAt,
+  }
+}
+
 async function syncSales(options = {}) {
   if (!credentials || !navigator.onLine) return
   if (syncing) {
@@ -404,8 +474,11 @@ async function syncSales(options = {}) {
     const previousInventoryFingerprints = inventoryFingerprints()
     const operations = currentInventoryOperations()
     const inventoryChangeRequests = currentInventoryChangeRequests()
+    const receivings = currentReceivings()
     const previousInventoryRequestFingerprints = inventoryRequestFingerprints()
+    const previousReceivingFingerprints = receivingFingerprints()
     const requestChangeFingerprints = new Map(inventoryChangeRequests.map(request => [request.id, inventoryRequestFingerprint(request)]))
+    const requestReceivingFingerprints = new Map(receivings.map(receiving => [receiving.id, receivingFingerprint(receiving)]))
     const requestInventoryFingerprints = new Map(operations.map(operation => [operation.id, inventoryFingerprint(operation)]))
     const eligibleSales = credentials.role === 'cashier'
       ? sales.filter(sale => sale.status === 'completed')
@@ -418,7 +491,12 @@ async function syncSales(options = {}) {
     const movementBatch = changedMovements.slice(0, MOVEMENT_BATCH_SIZE)
     const changedRequests = inventoryChangeRequests.filter(request => previousInventoryRequestFingerprints[request.id] !== requestChangeFingerprints.get(request.id))
     const requestBatch = changedRequests.slice(0, MOVEMENT_BATCH_SIZE)
-    const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length
+    const eligibleReceivings = credentials.role === 'cashier'
+      ? receivings.filter(receiving => receiving.status === 'owner_review')
+      : receivings
+    const changedReceivings = eligibleReceivings.filter(receiving => previousReceivingFingerprints[receiving.id] !== requestReceivingFingerprints.get(receiving.id))
+    const receivingBatch = changedReceivings.slice(0, MOVEMENT_BATCH_SIZE)
+    const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length + receivingBatch.length
     const pullCursor = lastPullCursor() || new Date(Date.now() - 10 * 60 * 1000).toISOString()
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
@@ -449,12 +527,13 @@ async function syncSales(options = {}) {
       inventoryProducts: inventoryBaselines(movementBatch),
       movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
       inventoryRequests: requestBatch.map(request => ({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges || [], proposedNote: request.proposedNote || '', status: request.status || 'pending', requestedBy: request.requestedBy || '', requestedAt: request.requestedAt || request.createdAt, reviewNote: request.reviewNote || '' })),
+      receivings: receivingBatch.map(cloudPayloadReceiving),
     }
     let { response, result } = await syncRequest(pendingPayload)
     let pushRecoveredWithPullOnly = false
     if (!response.ok) {
       console.warn('[CL POS] cloud push gagal; mencoba pull cloud terpisah', result.error || response.status)
-      const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [] })
+      const recovery = await syncRequest({ sales: [], expenses: [], inventoryProducts: [], movements: [], inventoryRequests: [], receivings: [] })
       if (recovery.response.ok) {
         result = recovery.result
         pushRecoveredWithPullOnly = true
@@ -475,6 +554,7 @@ async function syncSales(options = {}) {
     const cloudExpenses = Array.isArray(result.expenses) ? result.expenses : []
     const cloudMovements = Array.isArray(result.inventory_movements) ? result.inventory_movements : []
     const cloudRequests = Array.isArray(result.inventory_change_requests) ? result.inventory_change_requests : []
+    const cloudReceivings = Array.isArray(result.receivings) ? result.receivings : []
     const cloudProducts = Array.isArray(result.inventory_products) ? result.inventory_products : []
     window.CL_POS?.mergeCloudReceipts?.(cloudSales)
     window.CL_POS?.mergeCloudSales?.(cloudSales, {
@@ -487,6 +567,7 @@ async function syncSales(options = {}) {
     window.CL_POS?.mergeCloudExpenses?.(cloudExpenses)
     window.CL_POS?.mergeCloudInventoryMovements?.(cloudMovements, cloudProducts)
     window.CL_POS?.mergeCloudInventoryChangeRequests?.(cloudRequests)
+    window.CL_POS?.mergeCloudReceivings?.(cloudReceivings)
     if (Array.isArray(result.rejected_inventory_movements) && result.rejected_inventory_movements.length) {
       window.CL_POS?.rejectCloudInventoryMovements?.(result.rejected_inventory_movements)
     }
@@ -566,6 +647,20 @@ async function syncSales(options = {}) {
     Object.keys(nextRequestFingerprints).forEach(id => { if (!currentRequestMap.has(id)) delete nextRequestFingerprints[id] })
     saveInventoryRequestFingerprints(nextRequestFingerprints)
 
+    const nextReceivingFingerprints = receivingFingerprints()
+    const currentReceivingMap = new Map(currentReceivings().map(receiving => [receiving.id, receiving]))
+    cloudReceivings.forEach(receiving => {
+      const local = currentReceivingMap.get(receiving.id)
+      if (local) nextReceivingFingerprints[receiving.id] = receivingFingerprint(local)
+    })
+    if (!pushRecoveredWithPullOnly) receivingBatch.forEach(receiving => {
+      const local = currentReceivingMap.get(receiving.id)
+      const sentFingerprint = requestReceivingFingerprints.get(receiving.id)
+      if (local && receivingFingerprint(local) === sentFingerprint) nextReceivingFingerprints[receiving.id] = sentFingerprint
+    })
+    Object.keys(nextReceivingFingerprints).forEach(id => { if (!currentReceivingMap.has(id)) delete nextReceivingFingerprints[id] })
+    saveReceivingFingerprints(nextReceivingFingerprints)
+
     const pendingSales = [...current.values()].some(sale => {
       if (credentials.role === 'cashier' && sale.status !== 'completed') return false
       return next[sale.id] !== fingerprint(sale)
@@ -573,9 +668,10 @@ async function syncSales(options = {}) {
     const pendingExpenses = [...currentExpenseMap.values()].some(expense => nextExpenseFingerprints[expense.id] !== expenseFingerprint(expense))
     const pendingInventory = [...currentInventoryMap.values()].some(operation => nextInventoryFingerprints[operation.id] !== inventoryFingerprint(operation))
     const pendingRequests = [...currentRequestMap.values()].some(request => nextRequestFingerprints[request.id] !== inventoryRequestFingerprint(request))
+    const pendingReceivings = [...currentReceivingMap.values()].some(receiving => nextReceivingFingerprints[receiving.id] !== receivingFingerprint(receiving))
     if (pushRecoveredWithPullOnly) {
       setStatus(`Cloud tersambung · ${pendingCount} perubahan lokal perlu dicoba ulang`, 'syncing')
-    } else if (pendingSales || pendingExpenses || pendingInventory || pendingRequests) {
+    } else if (pendingSales || pendingExpenses || pendingInventory || pendingRequests || pendingReceivings) {
       rerunRequested = true
       setStatus('Mengirim perubahan terbaru…', 'syncing')
     } else {
