@@ -693,7 +693,7 @@ function startSync(detail) {
   credentials = detail
   clearInterval(timer)
   loadPopularProducts()
-  syncSales()
+  syncSales().finally(() => window.dispatchEvent(new CustomEvent('cl-pos-cloud-ready')))
   timer = setInterval(syncSales, POLL_MS)
 }
 
