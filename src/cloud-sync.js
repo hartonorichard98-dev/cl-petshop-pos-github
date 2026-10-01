@@ -508,7 +508,7 @@ async function syncSales(options = {}) {
     const receivingBatch = changedReceivings.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length + receivingBatch.length
     const pullCursor = lastPullCursor()
-    if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
+    if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan · transaksi ${changed.length} · stok ${changedMovements.length} · pengeluaran ${changedExpenses.length} · persetujuan ${changedRequests.length} · penerimaan ${changedReceivings.length}`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const syncRequest = async (payload, pullSinceOverride = pullCursor) => {
       const controller = new AbortController()
