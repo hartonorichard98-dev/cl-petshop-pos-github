@@ -161,18 +161,17 @@ function PointOfSale({ currentUser }: { currentUser: User }) {
   const change = Math.max(0, cash - subtotal)
 
   function addProduct(product: Product) {
-    if (!product.id || product.stock <= 0) return
+    if (!product.id) return
     setCart((items) => {
       const existing = items.find((item) => item.productId === product.id)
-      if (existing) return items.map((item) => item.productId === product.id ? { ...item, quantity: Math.min(product.stock, item.quantity + 1) } : item)
+      if (existing) return items.map((item) => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item)
       return [...items, { productId: product.id!, sku: product.sku, name: product.name, sellPrice: product.sellPrice, costPrice: product.costPrice, quantity: 1 }]
     })
   }
 
   function updateQuantity(productId: number, quantity: number) {
-    const stock = products.find((product) => product.id === productId)?.stock ?? 0
     if (quantity <= 0) return setCart((items) => items.filter((item) => item.productId !== productId))
-    setCart((items) => items.map((item) => item.productId === productId ? { ...item, quantity: Math.min(stock, quantity) } : item))
+    setCart((items) => items.map((item) => item.productId === productId ? { ...item, quantity } : item))
   }
 
   async function checkout() {
@@ -201,7 +200,7 @@ function PointOfSale({ currentUser }: { currentUser: User }) {
       await db.transaction('rw', db.sales, db.products, db.auditLogs, async () => {
         for (const item of cart) {
           const product = await db.products.get(item.productId)
-          if (!product || product.stock < item.quantity) throw new Error(`Stok ${item.name} tidak cukup.`)
+          if (!product) throw new Error(`Produk ${item.name} tidak ditemukan.`)
           await db.products.update(item.productId, { stock: product.stock - item.quantity, updatedAt: createdAt })
         }
         await db.sales.add(sale)
@@ -225,12 +224,12 @@ function PointOfSale({ currentUser }: { currentUser: User }) {
         <div className="search-box"><Search size={19} /><input placeholder="Cari nama barang atau SKU…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
         <div className="product-grid">
           {filtered.map((product) => (
-            <button className="product-card" key={product.id} onClick={() => addProduct(product)} disabled={product.stock <= 0}>
+            <button className="product-card" key={product.id} onClick={() => addProduct(product)}>
               <span className="product-icon"><PawPrint size={22} /></span>
               <span className="product-name">{product.name}</span>
               <span className="product-sku">{product.sku}</span>
               <strong>{rupiah(product.sellPrice)}</strong>
-              <small className={product.stock <= 5 ? 'stock-low' : ''}>{product.stock > 0 ? `Stok ${product.stock}` : 'Stok habis'}</small>
+              <small className={product.stock <= 5 ? 'stock-low' : ''}>{product.stock < 0 ? `Stok ${product.stock} · minus` : product.stock === 0 ? 'Stok 0 · tetap bisa dijual' : `Stok ${product.stock}`}</small>
             </button>
           ))}
           {filtered.length === 0 && <EmptyState icon={<Search />} title="Produk tidak ditemukan" text="Coba kata pencarian lain." />}
