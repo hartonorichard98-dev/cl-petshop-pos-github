@@ -13,6 +13,7 @@ const REQUEST_TIMEOUT_MS = 30000
 const SALES_BATCH_SIZE = 100
 const EXPENSE_BATCH_SIZE = 100
 const MOVEMENT_BATCH_SIZE = 200
+const INVENTORY_BASELINE_DAY = '2026-10-01'
 const SYNC_ENDPOINT = window.location.protocol === 'file:'
   ? 'https://cl-petshop-pos.vercel.app/api/pos-sync'
   : '/api/pos-sync'
@@ -312,6 +313,13 @@ function recordTime(record, fields) {
   return Number.POSITIVE_INFINITY
 }
 
+function isLegacyInventoryBaseline(operation, salesById) {
+  const referencedSale = salesById.get(String(operation?.referenceId || ''))
+  if (referencedSale && String(referencedSale.day || '') < INVENTORY_BASELINE_DAY) return true
+  const createdAt = Date.parse(operation?.createdAt || '')
+  return Number.isFinite(createdAt) && createdAt < Date.parse(`${INVENTORY_BASELINE_DAY}T00:00:00+07:00`)
+}
+
 function repairFingerprintCaches() {
   const cursor = Date.parse(lastPullCursor())
   if (!Number.isFinite(cursor)) return
@@ -480,12 +488,13 @@ async function syncSales(options = {}) {
     const requestChangeFingerprints = new Map(inventoryChangeRequests.map(request => [request.id, inventoryRequestFingerprint(request)]))
     const requestReceivingFingerprints = new Map(receivings.map(receiving => [receiving.id, receivingFingerprint(receiving)]))
     const requestInventoryFingerprints = new Map(operations.map(operation => [operation.id, inventoryFingerprint(operation)]))
+    const salesById = new Map(sales.map(sale => [String(sale.id), sale]))
     const eligibleSales = credentials.role === 'cashier'
       ? sales.filter(sale => sale.status === 'completed')
       : sales
     const changed = eligibleSales.filter(sale => previous[sale.id] !== requestFingerprints.get(sale.id))
     const changedExpenses = expenses.filter(expense => previousExpenseFingerprints[expense.id] !== requestExpenseFingerprints.get(expense.id))
-    const changedMovements = operations.filter(operation => previousInventoryFingerprints[operation.id] !== requestInventoryFingerprints.get(operation.id))
+    const changedMovements = operations.filter(operation => !isLegacyInventoryBaseline(operation, salesById) && previousInventoryFingerprints[operation.id] !== requestInventoryFingerprints.get(operation.id))
     const salesBatch = changed.slice(0, SALES_BATCH_SIZE)
     const expenseBatch = changedExpenses.slice(0, EXPENSE_BATCH_SIZE)
     const movementBatch = changedMovements.slice(0, MOVEMENT_BATCH_SIZE)
@@ -665,8 +674,9 @@ async function syncSales(options = {}) {
       if (credentials.role === 'cashier' && sale.status !== 'completed') return false
       return next[sale.id] !== fingerprint(sale)
     })
+    const currentSalesById = new Map([...current.values()].map(sale => [String(sale.id), sale]))
     const pendingExpenses = [...currentExpenseMap.values()].some(expense => nextExpenseFingerprints[expense.id] !== expenseFingerprint(expense))
-    const pendingInventory = [...currentInventoryMap.values()].some(operation => nextInventoryFingerprints[operation.id] !== inventoryFingerprint(operation))
+    const pendingInventory = [...currentInventoryMap.values()].some(operation => !isLegacyInventoryBaseline(operation, currentSalesById) && nextInventoryFingerprints[operation.id] !== inventoryFingerprint(operation))
     const pendingRequests = [...currentRequestMap.values()].some(request => nextRequestFingerprints[request.id] !== inventoryRequestFingerprint(request))
     const pendingReceivings = [...currentReceivingMap.values()].some(receiving => nextReceivingFingerprints[receiving.id] !== receivingFingerprint(receiving))
     if (pushRecoveredWithPullOnly) {
