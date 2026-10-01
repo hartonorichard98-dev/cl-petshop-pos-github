@@ -321,6 +321,15 @@ function isLegacyInventoryBaseline(operation, salesById) {
   return !Number.isFinite(createdAt) || createdAt < Date.parse(`${INVENTORY_BASELINE_DAY}T00:00:00+07:00`)
 }
 
+function isHistoricalSaleBaseline(sale) {
+  if (String(sale?.day || '') >= INVENTORY_BASELINE_DAY) return false
+  const cutoff = Date.parse(`${INVENTORY_BASELINE_DAY}T00:00:00+07:00`)
+  return !['editedAt', 'deletedAt', 'voidedAt'].some(field => {
+    const time = Date.parse(sale?.[field] || '')
+    return Number.isFinite(time) && time >= cutoff
+  })
+}
+
 function repairFingerprintCaches() {
   const cursor = Date.parse(lastPullCursor())
   if (!Number.isFinite(cursor)) return
@@ -493,7 +502,7 @@ async function syncSales(options = {}) {
     const eligibleSales = credentials.role === 'cashier'
       ? sales.filter(sale => sale.status === 'completed')
       : sales
-    const changed = eligibleSales.filter(sale => previous[sale.id] !== requestFingerprints.get(sale.id))
+    const changed = eligibleSales.filter(sale => !isHistoricalSaleBaseline(sale) && previous[sale.id] !== requestFingerprints.get(sale.id))
     const changedExpenses = expenses.filter(expense => previousExpenseFingerprints[expense.id] !== requestExpenseFingerprints.get(expense.id))
     const changedMovements = operations.filter(operation => !isLegacyInventoryBaseline(operation, salesById) && previousInventoryFingerprints[operation.id] !== requestInventoryFingerprints.get(operation.id))
     const salesBatch = changed.slice(0, SALES_BATCH_SIZE)
@@ -508,7 +517,7 @@ async function syncSales(options = {}) {
     const receivingBatch = changedReceivings.slice(0, MOVEMENT_BATCH_SIZE)
     const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length + receivingBatch.length
     const pullCursor = lastPullCursor()
-    if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan · transaksi ${changed.length} · stok ${changedMovements.length} · pengeluaran ${changedExpenses.length} · persetujuan ${changedRequests.length} · penerimaan ${changedReceivings.length}`, 'syncing')
+    if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
     const syncRequest = async (payload, pullSinceOverride = pullCursor) => {
       const controller = new AbortController()
@@ -673,6 +682,7 @@ async function syncSales(options = {}) {
 
     const pendingSales = [...current.values()].some(sale => {
       if (credentials.role === 'cashier' && sale.status !== 'completed') return false
+      if (isHistoricalSaleBaseline(sale)) return false
       return next[sale.id] !== fingerprint(sale)
     })
     const currentSalesById = new Map([...current.values()].map(sale => [String(sale.id), sale]))
