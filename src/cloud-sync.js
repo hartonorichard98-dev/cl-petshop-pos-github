@@ -322,6 +322,9 @@ function isLegacyInventoryBaseline(operation, salesById) {
 }
 
 function isHistoricalSaleBaseline(sale) {
+  if (String(sale?.reason || '') === 'Excel import 1 Oktober 2026 setelah SO 30 September') {
+    return !['editedAt', 'deletedAt', 'voidedAt'].some(field => Number.isFinite(Date.parse(sale?.[field] || '')))
+  }
   if (String(sale?.day || '') >= INVENTORY_BASELINE_DAY) return false
   const cutoff = Date.parse(`${INVENTORY_BASELINE_DAY}T00:00:00+07:00`)
   return !['editedAt', 'deletedAt', 'voidedAt'].some(field => {
