@@ -314,10 +314,11 @@ function recordTime(record, fields) {
 }
 
 function isLegacyInventoryBaseline(operation, salesById) {
+  if (operation?.syncStatus !== 'pending') return true
   const referencedSale = salesById.get(String(operation?.referenceId || ''))
   if (referencedSale && String(referencedSale.day || '') < INVENTORY_BASELINE_DAY) return true
   const createdAt = Date.parse(operation?.createdAt || '')
-  return Number.isFinite(createdAt) && createdAt < Date.parse(`${INVENTORY_BASELINE_DAY}T00:00:00+07:00`)
+  return !Number.isFinite(createdAt) || createdAt < Date.parse(`${INVENTORY_BASELINE_DAY}T00:00:00+07:00`)
 }
 
 function repairFingerprintCaches() {
