@@ -340,7 +340,7 @@ function repairFingerprintCaches() {
   let inventoryChanged = false
   currentInventoryOperations().forEach(operation => {
     if (inventoryCache[operation.id]?.startsWith?.('v2:')) return
-    if (operation.syncStatus !== 'synced') return
+    if (operation.syncStatus === 'pending') return
     inventoryCache[operation.id] = inventoryFingerprint(operation)
     inventoryChanged = true
   })
