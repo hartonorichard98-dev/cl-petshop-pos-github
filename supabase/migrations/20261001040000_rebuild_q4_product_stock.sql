@@ -8,9 +8,7 @@ select * from jsonb_to_recordset($catalog$[{"id":1,"sku":"CL-0001","barcode":"",
 );
 
 update public.products product
-set sku = incoming.sku,
-    barcode = nullif(incoming.barcode, ''),
-    name = incoming.name,
+set name = incoming.name,
     base_name = incoming."baseName",
     sell_price = round(incoming.sell),
     cost_price = round(incoming.cost),
@@ -21,15 +19,20 @@ set sku = incoming.sku,
     updated_at = now()
 from incoming_authoritative_catalog incoming
 where product.store_id = '24a3a058-991b-4b64-b1d2-912910842d34'::uuid
-  and lower(btrim(coalesce(product.base_name, product.name))) = lower(btrim(incoming.name));
+  and (product.local_id = incoming.id
+       or lower(btrim(coalesce(product.base_name, product.name))) = lower(btrim(incoming.name)));
 
 insert into public.products (store_id, local_id, sku, barcode, name, base_name, sell_price, cost_price, stock, track_stock, active, pricing_rule)
-select '24a3a058-991b-4b64-b1d2-912910842d34'::uuid, incoming.id, incoming.sku, nullif(incoming.barcode, ''), incoming.name, incoming."baseName", round(incoming.sell), round(incoming.cost), incoming.stock, true, incoming.active, jsonb_build_object('tiers', incoming.tiers)
+select '24a3a058-991b-4b64-b1d2-912910842d34'::uuid, incoming.id,
+       case when exists (select 1 from public.products conflict where conflict.store_id = '24a3a058-991b-4b64-b1d2-912910842d34'::uuid and conflict.sku = incoming.sku) then 'CL-Q4-' || incoming.id::text else incoming.sku end,
+       case when nullif(incoming.barcode, '') is null or exists (select 1 from public.products conflict where conflict.store_id = '24a3a058-991b-4b64-b1d2-912910842d34'::uuid and conflict.barcode = incoming.barcode) then null else incoming.barcode end,
+       incoming.name, incoming."baseName", round(incoming.sell), round(incoming.cost), incoming.stock, true, incoming.active, jsonb_build_object('tiers', incoming.tiers)
 from incoming_authoritative_catalog incoming
 where not exists (
   select 1 from public.products product
   where product.store_id = '24a3a058-991b-4b64-b1d2-912910842d34'::uuid
-    and lower(btrim(coalesce(product.base_name, product.name))) = lower(btrim(incoming.name))
+    and (product.local_id = incoming.id
+         or lower(btrim(coalesce(product.base_name, product.name))) = lower(btrim(incoming.name)))
 );
 
 update public.products product
