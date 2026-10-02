@@ -8,6 +8,7 @@
     "generate:supabase-seed": "node scripts/generate-supabase-seed.mjs",
     "prepare:price-list": "node scripts/copy-price-list.mjs",
     "build": "tsc -b && npm run prepare:price-list && vite build",
+    "build:cpanel": "npm run build && node scripts/build-cpanel-bundle.mjs",
     "preview": "vite preview",
     "check": "tsc -b --pretty false"
   },

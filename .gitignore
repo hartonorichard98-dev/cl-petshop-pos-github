@@ -2,6 +2,9 @@ node_modules/
 dist/
 .env
 .env.local
+cpanel/api/config.php
+cpanel/database/import-production.sql
+deployment/
 .env.*.local
 .vercel/
 supabase/.temp/
