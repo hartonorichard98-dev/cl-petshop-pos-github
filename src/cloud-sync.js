@@ -406,7 +406,7 @@ function inventoryBaselines(operations) {
     const product = products.get(productId)
     const calculatedStock = (Number(product?.stock) || 0) - pendingDeltas.get(productId)
     return {
-      productId,
+      productId: Number(product?.cloudProductId) || productId,
       stock: Math.max(0, Math.round(explicitBaselines.get(productId) ?? calculatedStock)),
       trackStock: Boolean(product?.trackStock),
     }
@@ -440,7 +440,7 @@ function cloudPayloadExpense(expense) {
     recipient: expense.recipient,
     purpose: expense.purpose,
     note: expense.note || '',
-    status: expense.status || 'active',
+    status: expense.status === 'deleted' || expense.status === 'cancelled' ? 'cancelled' : 'active',
     type: expense.type === 'goods' ? 'goods' : 'cash',
     pocket: expense.pocket === 'profit' ? 'profit' : expense.pocket === 'pending' ? 'pending' : 'store',
     productId: expense.productId || null,
@@ -547,7 +547,7 @@ async function syncSales(options = {}) {
       sales: salesBatch.map(cloudPayloadSale),
       expenses: expenseBatch.map(cloudPayloadExpense),
       inventoryProducts: inventoryBaselines(movementBatch),
-      movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes, note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
+      movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes.map(change => ({ ...change, productId: Number(change.cloudProductId) || Number(change.productId) })), note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
       inventoryRequests: requestBatch.map(request => ({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges || [], proposedNote: request.proposedNote || '', status: request.status || 'pending', requestedBy: request.requestedBy || '', requestedAt: request.requestedAt || request.createdAt, reviewNote: request.reviewNote || '' })),
       receivings: receivingBatch.map(cloudPayloadReceiving),
     }
