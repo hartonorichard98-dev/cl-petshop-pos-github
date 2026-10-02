@@ -1,16 +1,10 @@
-import crypto from 'node:crypto'
+import bcrypt from 'bcryptjs'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const salesPath = process.argv[2] || '/tmp/cl-pos-production-sales-2026.json'
 const snapshotPath = process.argv[3] || '/tmp/cl-pos-production-snapshot.json'
 const outputPath = process.argv[4] || 'cpanel/database/import-production.sql'
-const pepper = process.env.CL_POS_PIN_PEPPER
-
-if (!pepper || pepper.length < 32) {
-  throw new Error('CL_POS_PIN_PEPPER minimal 32 karakter')
-}
-
 const salesExport = JSON.parse(fs.readFileSync(salesPath, 'utf8'))
 const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'))
 const sales = Array.isArray(salesExport.sales) ? salesExport.sales : []
@@ -31,7 +25,7 @@ function mysqlDate(value) {
 }
 
 function hashPin(pin) {
-  return crypto.createHash('sha256').update(pepper + pin).digest('hex')
+  return bcrypt.hashSync(pin, 12)
 }
 
 function chunks(values, size = 150) {

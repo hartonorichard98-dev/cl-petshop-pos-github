@@ -90,8 +90,11 @@ function authenticate(PDO $pdo, array $config, string $username, string $pin): ?
     $statement->execute([$username]);
     $staff = $statement->fetch();
     if (!$staff) return null;
-    $candidate = hash('sha256', (string)$config['pin_pepper'] . $pin);
-    return hash_equals((string)$staff['pin_hash'], $candidate) ? $staff : null;
+    $storedHash = (string)$staff['pin_hash'];
+    if (password_verify($pin, $storedHash)) return $staff;
+    if (strlen($storedHash) !== 64 || empty($config['pin_pepper'])) return null;
+    $legacyCandidate = hash('sha256', (string)$config['pin_pepper'] . $pin);
+    return hash_equals($storedHash, $legacyCandidate) ? $staff : null;
 }
 
 function validDate(mixed $value): string {

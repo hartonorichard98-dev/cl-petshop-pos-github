@@ -9,10 +9,12 @@
     "prepare:price-list": "node scripts/copy-price-list.mjs",
     "build": "tsc -b && npm run prepare:price-list && vite build",
     "build:cpanel": "npm run build && node scripts/build-cpanel-bundle.mjs",
+    "test": "vitest run",
     "preview": "vite preview",
     "check": "tsc -b --pretty false"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "dexie": "^4.2.0",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
@@ -24,6 +26,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
-    "vite-plugin-pwa": "^1.1.0"
+    "vite-plugin-pwa": "^1.1.0",
+    "vitest": "^5.0.3"
   }
 }

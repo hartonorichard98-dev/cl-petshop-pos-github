@@ -52,7 +52,16 @@ Build produksi:
 
 ```bash
 npm run build
+npm test
 ```
+
+## Arsitektur produksi
+
+`kasir-offline.html` adalah entry point produksi. `src/App.tsx` tetap menjadi referensi React dan tidak dipakai oleh halaman produksi. Sinkronisasi aktif tetap memakai `src/cloud-sync.js` agar offline-first dan kompatibel dengan perangkat toko.
+
+Logika cloud baru dipisah ke modul TypeScript di `src/cloud/` untuk tipe data, fingerprint idempotensi, dan normalisasi payload. Modul pure tersebut diuji dengan Vitest; engine produksi lama tetap dipertahankan selama migrasi bertahap agar tidak memutus transaksi.
+
+PIN Supabase divalidasi server-side memakai `crypt(..., gen_salt('bf'))`. Jalur cPanel baru memakai `password_hash`/`password_verify` bcrypt. Browser tidak pernah mengirim hash buatan sendiri sebagai pengganti PIN.
 
 ## Akun demo
 
