@@ -427,6 +427,25 @@ function inventoryBaselines(operations) {
   })
 }
 
+function cloudMovementChanges(operation) {
+  const normalized = []
+  const mirrored = new Map()
+  ;(operation.changes || []).forEach(change => {
+    const productId = Number(change.cloudProductId) || Number(change.productId)
+    const localProductId = Number(change.productId)
+    const quantityDelta = Number(change.quantityDelta) || 0
+    if (!productId || !quantityDelta) return
+    const stockBefore = Number(change.stockBefore)
+    const stockAfter = Number(change.stockAfter)
+    const signature = [productId, quantityDelta, stockBefore, stockAfter].join(':')
+    const previous = mirrored.get(signature)
+    if (previous && previous.localProductId !== localProductId) return
+    mirrored.set(signature, { localProductId })
+    normalized.push({ ...change, productId })
+  })
+  return normalized
+}
+
 function wholeMoney(value) {
   const amount = Number(value)
   return Number.isFinite(amount) ? Math.round(amount) : 0
@@ -562,7 +581,7 @@ async function syncSales(options = {}) {
       sales: salesBatch.map(cloudPayloadSale),
       expenses: expenseBatch.map(cloudPayloadExpense),
       inventoryProducts: inventoryBaselines(movementBatch),
-      movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: operation.changes.map(change => ({ ...change, productId: Number(change.cloudProductId) || Number(change.productId) })), note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
+      movements: movementBatch.map(operation => ({ id: operation.id, type: operation.type, referenceId: operation.referenceId, changes: cloudMovementChanges(operation), note: operation.note || '', createdBy: operation.createdBy || '', createdAt: operation.createdAt })),
       inventoryRequests: requestBatch.map(request => ({ id: request.id, movementId: request.movementId, requestType: request.requestType, proposedChanges: request.proposedChanges || [], proposedNote: request.proposedNote || '', status: request.status || 'pending', requestedBy: request.requestedBy || '', requestedAt: request.requestedAt || request.createdAt, reviewNote: request.reviewNote || '' })),
       receivings: receivingBatch.map(cloudPayloadReceiving),
     }
