@@ -7,7 +7,7 @@ const INVENTORY_REQUEST_FINGERPRINTS_KEY = 'cl-petshop-cloud-inventory-request-f
 const RECEIVING_FINGERPRINTS_KEY = 'cl-petshop-cloud-receiving-fingerprints-v1'
 const LAST_PULL_KEY_PREFIX = 'cl-petshop-cloud-last-pull-v1'
 const FULL_PULL_KEY_PREFIX = 'cl-petshop-cloud-full-pull-v2'
-const STOCK_RECONCILIATION_PULL_VERSION = '2026-10-02-stock-reconciliation-v1'
+const STOCK_RECONCILIATION_PULL_VERSION = '2026-10-02-stock-reconciliation-v2'
 const POPULAR_PRODUCTS_KEY = 'cl-petshop-popular-products-v1'
 const POLL_MS = 120000
 const REQUEST_TIMEOUT_MS = 30000
@@ -280,9 +280,14 @@ function markFullPullComplete() {
 
 function ensureStockReconciliationPull() {
   const key = `${STOCK_RECONCILIATION_PULL_VERSION}:${credentials?.username || 'unknown'}`
-  if (localStorage.getItem(key) === 'done') return
+  if (localStorage.getItem(key) === 'done') return false
   localStorage.removeItem(lastPullKey())
   localStorage.removeItem(fullPullKey())
+  return true
+}
+
+function markStockReconciliationPullComplete() {
+  const key = `${STOCK_RECONCILIATION_PULL_VERSION}:${credentials?.username || 'unknown'}`
   try { localStorage.setItem(key, 'done') } catch {}
 }
 
@@ -494,7 +499,7 @@ async function syncSales(options = {}) {
   syncing = true
   rerunRequested = false
   try {
-    ensureStockReconciliationPull()
+    const forcedStockPull = ensureStockReconciliationPull()
     repairFingerprintCaches()
     const previous = fingerprints()
     const sales = currentSales()
@@ -598,6 +603,7 @@ async function syncSales(options = {}) {
     window.CL_POS?.mergeCloudAuditLogs?.(Array.isArray(result.audit_logs) ? result.audit_logs : [])
     window.CL_POS?.mergeCloudExpenses?.(cloudExpenses)
     window.CL_POS?.mergeCloudInventoryMovements?.(cloudMovements, cloudProducts)
+    if (forcedStockPull && cloudProducts.length) markStockReconciliationPullComplete()
     window.CL_POS?.mergeCloudInventoryChangeRequests?.(cloudRequests)
     window.CL_POS?.mergeCloudReceivings?.(cloudReceivings)
     if (Array.isArray(result.rejected_inventory_movements) && result.rejected_inventory_movements.length) {
