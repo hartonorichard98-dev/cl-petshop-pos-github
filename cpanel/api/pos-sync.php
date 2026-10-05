@@ -63,6 +63,7 @@ try {
     if ($popularLimit > 0) respond(200, ['role' => $staff['role'], 'products' => popularProducts($pdo, $popularLimit)]);
 
     $pdo->beginTransaction();
+    $catalogSync=syncCatalogProducts($pdo,$body,$staff);
     writeBatch($pdo, $body, $staff);
     $pdo->commit();
 
@@ -71,6 +72,7 @@ try {
     $result['role'] = $staff['role'];
     $result['sales_total'] = count($result['sales']);
     $result['rejected_inventory_movements'] = [];
+    $result['catalog_sync'] = $catalogSync;
     $result['sync_cursor'] = gmdate('c');
     respond(200, $result);
 } catch (Throwable $error) {
@@ -185,6 +187,16 @@ function writeBatch(PDO $pdo, array $body, array $staff): void {
     foreach (array_slice(is_array($body['stockOpnames'] ?? null) ? $body['stockOpnames'] : [], 0, 100) as $stockOpname) upsertStockOpname($pdo, $stockOpname, $staff);
 }
 
+function syncCatalogProducts(PDO $pdo, array $body, array $staff): array {
+    $result=['accepted'=>[],'rejected'=>[]];
+    foreach(array_slice(is_array($body['catalogProducts']??null)?$body['catalogProducts']:[],0,100) as $product){
+        $item=upsertCatalogProduct($pdo,$product,$staff);
+        if(isset($item['accepted']))$result['accepted'][]=$item['accepted'];
+        if(isset($item['rejected']))$result['rejected'][]=$item['rejected'];
+    }
+    return $result;
+}
+
 function upsertSale(PDO $pdo, array $sale, array $staff): void {
     if (($staff['role'] ?? '') !== 'owner' && ($sale['status'] ?? 'completed') !== 'completed') return;
     $id = (string)($sale['id'] ?? '');
@@ -226,6 +238,32 @@ function upsertProduct(PDO $pdo, array $product): void {
     $row=['id'=>$product['id']??null,'local_id'=>$localId,'sku'=>(string)($product['sku']??('CL-'.$localId)),'name'=>(string)($product['name']??''),'stock'=>(int)($product['stock']??0),'active'=>(bool)($product['active']??true),'barcode'=>$product['barcode']??null,'base_name'=>$product['base_name']??$product['baseName']??$product['name']??'','image_url'=>$product['image_url']??$product['image']??null,'cost_price'=>(int)($product['cost_price']??$product['cost']??0),'sell_price'=>(int)($product['sell_price']??$product['sell']??0),'track_stock'=>(bool)($product['track_stock']??$product['trackStock']??false),'pricing_rule'=>$product['pricing_rule']??['tiers'=>$product['tiers']??[]],'updated_at'=>(string)($product['updated_at']??$product['updatedAt']??gmdate('c'))];
     $sql='INSERT INTO products (local_id,sku,stock,track_stock,updated_at,payload) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE sku=VALUES(sku),stock=VALUES(stock),track_stock=VALUES(track_stock),updated_at=VALUES(updated_at),payload=VALUES(payload)';
     $pdo->prepare($sql)->execute([$localId,$row['sku'],$row['stock'],$row['track_stock']?1:0,mysqlDate($row['updated_at']),json_encode($row,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
+}
+
+function upsertCatalogProduct(PDO $pdo, array $product, array $staff): array {
+    $localId=(int)($product['cloudProductId']??$product['productId']??$product['id']??0);
+    if(!$localId)return ['rejected'=>['localId'=>null,'reason'=>'Produk tidak valid']];
+    if(($staff['role']??'')!=='owner')return ['rejected'=>['localId'=>$localId,'reason'=>'Hanya owner yang boleh mengubah katalog']];
+    $statement=$pdo->prepare('SELECT sku,stock,track_stock,payload FROM products WHERE local_id=? FOR UPDATE');
+    $statement->execute([$localId]);
+    $existing=$statement->fetch();
+    if(!$existing)return ['rejected'=>['localId'=>$localId,'reason'=>'Produk cloud tidak ditemukan']];
+    $current=json_decode((string)$existing['payload'],true);
+    if(!is_array($current))$current=[];
+    $currentRevision=(int)($current['catalog_revision']??$current['catalogRevision']??0);
+    $baseRevision=(int)($product['baseRevision']??0);
+    if($baseRevision!==$currentRevision)return ['rejected'=>['localId'=>$localId,'reason'=>'Versi produk sudah berubah di perangkat lain','current'=>$current]];
+    $tiers=is_array($product['tiers']??null)?$product['tiers']:[];
+    foreach($tiers as $tier){if((int)($tier['minQty']??0)<1||(float)($tier['sell']??0)<=0||(float)($tier['cost']??0)<0)return ['rejected'=>['localId'=>$localId,'reason'=>'Tangga harga tidak valid','current'=>$current]];}
+    if(!$tiers)return ['rejected'=>['localId'=>$localId,'reason'=>'Tangga harga kosong','current'=>$current]];
+    $nextRevision=$currentRevision+1;
+    $now=gmdate('c');
+    $updated=array_merge($current,['local_id'=>$localId,'sku'=>(string)($product['sku']??$existing['sku']),'barcode'=>$product['barcode']??null,'name'=>(string)($product['name']??$current['name']??''),'base_name'=>(string)($product['baseName']??$product['name']??$current['base_name']??''),'sell_price'=>(int)round((float)($product['sell']??$current['sell_price']??0)),'cost_price'=>(int)round((float)($product['cost']??$current['cost_price']??0)),'active'=>(bool)($product['active']??true),'pricing_rule'=>['tiers'=>$tiers,'needsPrice'=>false],'catalog_revision'=>$nextRevision,'catalog_updated_at'=>(string)($product['catalogUpdatedAt']??$now),'stock'=>(int)$existing['stock'],'track_stock'=>(bool)$existing['track_stock'],'updated_at'=>$now]);
+    $pdo->prepare('UPDATE products SET sku=?,updated_at=?,payload=? WHERE local_id=?')->execute([$updated['sku'],mysqlDate($now),json_encode($updated,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),$localId]);
+    $auditId='catalog-'.hash('sha256',$localId.'|'.$nextRevision.'|'.$now);
+    $audit=['id'=>$auditId,'action'=>'UPDATE_PRODUCT_CATALOG','entity_id'=>(string)$localId,'actor_name'=>$staff['display_name'],'actor_role'=>$staff['role'],'detail'=>['revision_before'=>$currentRevision,'revision_after'=>$nextRevision,'pricing_before'=>$current['pricing_rule']??null,'pricing_after'=>$updated['pricing_rule'],'sell_before'=>$current['sell_price']??null,'sell_after'=>$updated['sell_price'],'cost_before'=>$current['cost_price']??null,'cost_after'=>$updated['cost_price']],'created_at'=>$now];
+    $pdo->prepare('INSERT INTO audit_logs (id,created_at,payload) VALUES (?,?,?) ON DUPLICATE KEY UPDATE payload=VALUES(payload)')->execute([$auditId,mysqlDate($now),json_encode($audit,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
+    return ['accepted'=>['localId'=>$localId,'revision'=>$nextRevision,'catalogUpdatedAt'=>$updated['catalog_updated_at']]];
 }
 
 function upsertMovement(PDO $pdo, array $movement, array $staff): void {

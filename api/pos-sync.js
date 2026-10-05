@@ -3,6 +3,7 @@ const MAX_EXPENSES_PER_SYNC = 250
 const MAX_MOVEMENTS_PER_SYNC = 500
 const MAX_INVENTORY_PRODUCTS_PER_SYNC = 500
 const MAX_INVENTORY_REQUESTS_PER_SYNC = 200
+const MAX_CATALOG_PRODUCTS_PER_SYNC = 100
 
 function wholeMoney(value) {
   const amount = Number(value)
@@ -70,6 +71,7 @@ export default async function handler(request, response) {
   const inventoryProducts = Array.isArray(request.body?.inventoryProducts) ? request.body.inventoryProducts : []
   const inventoryRequests = Array.isArray(request.body?.inventoryRequests) ? request.body.inventoryRequests : []
   const receivings = Array.isArray(request.body?.receivings) ? request.body.receivings : []
+  const catalogProducts = Array.isArray(request.body?.catalogProducts) ? request.body.catalogProducts : []
   if (!/^[a-z0-9._-]{2,40}$/.test(username) || !/^\d{4,12}$/.test(pin)) {
     return json(response, 401, { error: 'Login cloud tidak valid' })
   }
@@ -202,6 +204,9 @@ export default async function handler(request, response) {
   if (inventoryRequests.length > MAX_INVENTORY_REQUESTS_PER_SYNC) {
     return json(response, 413, { error: 'Antrean persetujuan repack terlalu besar' })
   }
+  if (catalogProducts.length > MAX_CATALOG_PRODUCTS_PER_SYNC) {
+    return json(response, 413, { error: 'Antrean perubahan produk terlalu besar' })
+  }
   const normalizedSales = sales.map(sale => ({
     ...sale,
     total: wholeMoney(sale?.total),
@@ -272,7 +277,18 @@ export default async function handler(request, response) {
         body: JSON.stringify(body),
       })
     const authBody = { p_api_secret: syncSecret, p_store_id: storeId, p_username: username, p_pin: pin }
-    const hasWrites = normalizedSales.length || normalizedExpenses.length || inventoryProducts.length || movements.length || inventoryRequests.length || receivings.length
+    let catalogResult = { accepted: [], rejected: [] }
+    if (catalogProducts.length) {
+      const catalogResponse = await rpc('pos_sync_product_catalog', { ...authBody, p_products: catalogProducts })
+      const catalogText = await catalogResponse.text()
+      catalogResult = catalogText ? JSON.parse(catalogText) : catalogResult
+      if (!catalogResponse.ok) {
+        const message = String(catalogResult?.message || '')
+        if (message.includes('Only owner')) return json(response, 403, { error: 'Hanya owner yang boleh mengubah katalog produk' })
+        return json(response, 502, { error: 'Supabase gagal menyimpan perubahan produk' })
+      }
+    }
+    const hasWrites = normalizedSales.length || normalizedExpenses.length || inventoryProducts.length || movements.length || inventoryRequests.length || receivings.length || catalogProducts.length
     let writeResult = {}
     if (hasWrites) {
       const writeResponse = await rpc('pos_write_batch', {
@@ -304,6 +320,7 @@ export default async function handler(request, response) {
       ...result,
       sales_total: Array.isArray(result.sales) ? result.sales.length : 0,
       rejected_inventory_movements: writeResult.rejected_inventory_movements || [],
+      catalog_sync: catalogResult,
       sync_cursor: syncCursor,
     })
   } catch (error) {

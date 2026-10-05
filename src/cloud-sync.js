@@ -643,7 +643,8 @@ async function syncSales(options = {}) {
     const receivingBatch = changedReceivings.slice(0, MOVEMENT_BATCH_SIZE)
     const changedStockOpnames = stockOpnames.filter(record => previousStockOpnameFingerprints[record.id] !== requestStockOpnameFingerprints.get(record.id))
     const stockOpnameBatch = changedStockOpnames.slice(0, MOVEMENT_BATCH_SIZE)
-    const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length + receivingBatch.length + stockOpnameBatch.length
+    const catalogBatch = ['owner', 'admin'].includes(credentials.role) ? (window.CL_POS?.getPendingCatalogProducts?.() || []) : []
+    const pendingCount = changed.length + changedExpenses.length + changedMovements.length + requestBatch.length + receivingBatch.length + stockOpnameBatch.length + catalogBatch.length
     const pullCursor = lastPullCursor()
     if (pendingCount) setStatus(`Mengirim antrean cloud · ${pendingCount} perubahan`, 'syncing')
     else setStatus('Cloud tersambung · memeriksa pembaruan', 'online')
@@ -669,6 +670,7 @@ async function syncSales(options = {}) {
       }
     }
     const pendingPayload = {
+      catalogProducts: catalogBatch,
       sales: salesBatch.map(cloudPayloadSale),
       expenses: expenseBatch.map(cloudPayloadExpense),
       inventoryProducts: mergeProductSnapshots(inventoryBaselines(movementBatch), approvedStockOpnameProducts(stockOpnameBatch)),
@@ -705,6 +707,7 @@ async function syncSales(options = {}) {
     const cloudReceivings = Array.isArray(result.receivings) ? result.receivings : []
     const cloudStockOpnames = Array.isArray(result.stock_opnames) ? result.stock_opnames : []
     const cloudProducts = Array.isArray(result.inventory_products) ? result.inventory_products : []
+    if (result.catalog_sync) window.CL_POS?.resolveCatalogSync?.(result.catalog_sync)
     window.CL_POS?.mergeCloudReceipts?.(cloudSales)
     window.CL_POS?.mergeCloudSales?.(cloudSales, {
       includeCost: result.role === 'owner',
@@ -715,6 +718,7 @@ async function syncSales(options = {}) {
     window.CL_POS?.mergeCloudAuditLogs?.(Array.isArray(result.audit_logs) ? result.audit_logs : [])
     window.CL_POS?.mergeCloudExpenses?.(cloudExpenses)
     window.CL_POS?.mergeCloudInventoryMovements?.(cloudMovements, cloudProducts)
+    window.CL_POS?.mergeCloudProductCatalog?.(cloudProducts)
     if (forcedStockPull && cloudProducts.length) markStockReconciliationPullComplete()
     window.CL_POS?.mergeCloudInventoryChangeRequests?.(cloudRequests)
     window.CL_POS?.mergeCloudReceivings?.(cloudReceivings)
